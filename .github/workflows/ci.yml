@@ -63,7 +63,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -scheme PrivacyLens \
+            -scheme PhotoDock \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -skipMacroValidation \
             -resultBundlePath TestResults.xcresult

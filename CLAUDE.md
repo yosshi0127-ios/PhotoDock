@@ -1,6 +1,6 @@
-# PrivacyLens（仮名）
+# PhotoDock / 写真ドック
 
-写真のプライバシー診断 iOS アプリ。**クリーン3層 + swift-dependencies DI**
+カメラロールの棚卸し診断 iOS アプリ（全量スキャンで「見られたらまずい写真」を洗い出し、対処まで導く）。**クリーン3層 + swift-dependencies DI**
 （アーキテクチャは https://github.com/yosshi0127-ios/SwiftArchitectureSample に基づく。規約の詳細はスキル `architecture-guide`）。
 **プロダクトの方針・決定事項・制約は `docs/product-brief.md` が原本**。作業前に必ず読む。
 
@@ -16,11 +16,11 @@
 ## ビルド / テスト
 
 ```bash
-xcodebuild build -scheme PrivacyLens -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
-xcodebuild test  -scheme PrivacyLens -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+xcodebuild build -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+xcodebuild test  -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
 ```
 
-- **Xcode プロジェクトは未作成**。最初の作業は Xcode での新規プロジェクト生成（App / Swift 6 / iOS 18、repo ルート直下に `PrivacyLens.xcodeproj`）と swift-dependencies の SPM 追加。生成後にこの節の destination を実環境に合わせて更新する
+- **Xcode プロジェクトは未作成**。最初の作業は Xcode での新規プロジェクト生成（App / Swift 6 / iOS 18、repo ルート直下に `PhotoDock.xcodeproj`、bundle ID `com.yosshi0127.photodock`）と swift-dependencies の SPM 追加。生成後にこの節の destination を実環境に合わせて更新する
 - 初回ビルドは2分超かかることがある（バックグラウンド実行推奨）
 - SourceKit の diagnostics（`No such module 'Dependencies'` 等）はインデックス誤検知が多い。真実は xcodebuild の結果
 - **Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する（brief 参照）

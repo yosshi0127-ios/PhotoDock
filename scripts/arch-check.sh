@@ -6,7 +6,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 # アプリターゲットのルート（repo ルートからの相対）。プロジェクト固有名はここだけ。
-APP="PrivacyLens"
+APP="PhotoDock"
 DI_DIR="$APP/App/DI"
 status=0
 
