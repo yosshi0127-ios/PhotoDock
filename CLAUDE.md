@@ -16,11 +16,13 @@
 ## ビルド / テスト
 
 ```bash
-xcodebuild build -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
-xcodebuild test  -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
 ```
 
-- **Xcode プロジェクトは未作成**。最初の作業は Xcode での新規プロジェクト生成（App / Swift 6 / iOS 18、repo ルート直下に `PhotoDock.xcodeproj`、bundle ID `com.yosshi0127.photodock`）と swift-dependencies の SPM 追加。生成後にこの節の destination を実環境に合わせて更新する
+- **プロジェクトは `PhotoDock/PhotoDock.xcodeproj`（repo ルートの1段下）**、ソースは隣の `PhotoDock/PhotoDock/`。repo ルートから叩くときは `-project` が必須（`scripts/arch-check.sh` の `APP` と CI も同じパス前提）
+- 確定済みのビルド設定: iOS 18.0 / Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`（既定 MainActor だと Core protocol が暗黙隔離され恒常ルール3と衝突するため）/ bundle ID `com.yosshi0127.photodock` / 署名は個人チーム `TK8X68MS6W`（会社チーム `R6YNJ9HW8W` を使わない）
+- **未了**: swift-dependencies の SPM 追加、層ディレクトリ（`Core/` `Infrastructure/` `Features/` `App/DI/`）の作成
 - 初回ビルドは2分超かかることがある（バックグラウンド実行推奨）
 - SourceKit の diagnostics（`No such module 'Dependencies'` 等）はインデックス誤検知が多い。真実は xcodebuild の結果
 - **Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する（brief 参照）

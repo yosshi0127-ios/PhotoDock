@@ -63,6 +63,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
+            -project PhotoDock/PhotoDock.xcodeproj \
             -scheme PhotoDock \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -skipMacroValidation \
