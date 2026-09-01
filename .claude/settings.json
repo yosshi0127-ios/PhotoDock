@@ -1,0 +1,26 @@
+{
+  "enabledPlugins": {
+    "swiftui-pro@swiftui-agent-skill": true
+  },
+  "extraKnownMarketplaces": {
+    "swiftui-agent-skill": {
+      "source": {
+        "source": "github",
+        "repo": "twostraws/swiftui-agent-skill"
+      }
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v swiftlint >/dev/null 2>&1 || exit 0; command -v jq >/dev/null 2>&1 || exit 0; f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.swift) swiftlint lint --quiet --strict --force-exclude --config \"$CLAUDE_PROJECT_DIR/.swiftlint.yml\" \"$f\" 1>&2 || exit 2 ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}

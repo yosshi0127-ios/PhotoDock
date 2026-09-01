@@ -1,0 +1,57 @@
+# アーキテクチャ規約の機械検査（CLAUDE.md の恒常ルールに対応）。
+# スタイルルールは意図的に無効（only_rules: custom_rules のみ）。必要になったら別途有効化する。
+#
+# 各ルールは「層ディレクトリ名」（Core/ Features/ App/DI/ 等）にアンカーしており、プロジェクト名に依存しない。
+
+only_rules:
+  - custom_rules
+
+custom_rules:
+  no_frameworks_in_core:
+    name: "Core は Foundation 以外 import 禁止（恒常ルール3）"
+    included: ".*/Core/.*\\.swift"
+    regex: "^import (?!Foundation\\b)\\w+"
+    message: "Core は純粋ドメイン。SwiftUI / Dependencies / Infrastructure を import しない"
+    severity: error
+
+  no_isolation_in_core:
+    name: "Core に実装の隔離を書かない（恒常ルール3）"
+    included: ".*/Core/.*\\.swift"
+    regex: "@MainActor|@globalActor"
+    message: "隔離（@MainActor 等）は実装側（Infrastructure）に付ける。契約は async 要件のみ"
+    severity: error
+
+  dependency_only_in_usecase:
+    name: "@Dependency は UseCase のみ（恒常ルール1・2）"
+    excluded:
+      - ".*/UseCase/.*\\.swift"
+      - ".*/App/DI/.*\\.swift"
+    regex: "@Dependency\\("
+    message: "生の依存を持てるのは UseCase だけ。State は UseCase 経由、View はノータッチ"
+    severity: error
+
+  dependencies_import_only_in_usecase_and_di:
+    name: "import Dependencies は UseCase と App/DI のみ（恒常ルール1・2）"
+    excluded:
+      - ".*/UseCase/.*\\.swift"
+      - ".*/App/DI/.*\\.swift"
+      - ".*Tests/.*\\.swift"   # テストターゲットは withDependencies のため対象外
+    regex: "^import Dependencies\\b"
+    message: "State / View / Infrastructure は Dependencies を知らない。依存の取得は UseCase、登録は App/DI"
+    severity: error
+
+  policy_is_pure:
+    name: "Policy は同期・純粋（恒常ルール4）"
+    included: ".*/Core/Policy/.*\\.swift"
+    regex: "\\b(?:async|await|try)\\b"
+    match_kinds: keyword
+    message: "Policy は「入力 → 判断」の純粋関数だけ。I/O・非同期・対応の実行は UseCase に置く"
+    severity: error
+
+  no_infra_in_features:
+    name: "Features から Infrastructure 具象を参照しない"
+    included: ".*/Features/.*\\.swift"
+    # 具象名リストは育てる運用（Infrastructure 実装を追加したらここにも足す）
+    regex: "URLSession"
+    message: "Features が依存してよいのは Core の protocol だけ（DIP）"
+    severity: error

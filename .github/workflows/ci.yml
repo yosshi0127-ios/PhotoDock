@@ -1,0 +1,77 @@
+name: CI
+
+# README「規約の機械検査」の節と同じ内容を CI でも回す。
+#   1. scripts/arch-check.sh  … 恒常ルール5（DI 3値 / 1依存1ファイル / Core protocol の登録漏れ / liveValue）
+#   2. swiftlint --strict     … 恒常ルール1〜4（層違反・注入点違反・Policy の純粋性）
+#   3. xcodebuild test        … Unit（Policy / UseCase / live 登録）+ UI（live 実装の通し）
+#
+# arch-check は bash + grep だけなので Linux ランナーに置く（macOS ランナーは課金レートが高いため、
+# 層違反の検出は先に安いジョブで落とす）。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arch-check:
+    name: アーキ規約（DI 3値・登録漏れ）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: scripts/arch-check.sh
+        run: scripts/arch-check.sh
+
+  lint-and-test:
+    name: SwiftLint + build/test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: 環境の確認
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | grep iOS || true
+          xcrun simctl list devices available | grep iPhone || true
+
+      - name: SwiftLint custom rules（層違反・注入点違反）
+        run: |
+          swiftlint version || brew install swiftlint
+          swiftlint lint --strict --quiet
+
+      # ランナーイメージによって用意されている機種・OS が変わる（iPhone 16 が無いこともある）ため、
+      # 機種名を固定せず「最新 iOS ランタイムの iPhone を1台」実行時に選ぶ。
+      # ローカルの手順は CLAUDE.md / README.md 記載の固定 destination のままでよい。
+      - name: シミュレータの選択
+        id: simulator
+        run: |
+          # 最新の iOS ランタイムに属する iPhone を1台選び、その UDID を後段へ渡す
+          udid=$(xcrun simctl list devices available --json | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; r={k: v for k, v in d.items() if '.iOS-' in k}; latest=max(r, key=lambda k: [int(n) for n in k.split('.iOS-')[1].split('-')]); print(next(x['udid'] for x in r[latest] if x['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices | grep "$udid"
+
+      - name: テスト（Unit + UI）
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme PrivacyLens \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -skipMacroValidation \
+            -resultBundlePath TestResults.xcresult
+
+      - name: 失敗時はテスト結果を artifact に残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: TestResults.xcresult
+          retention-days: 7
