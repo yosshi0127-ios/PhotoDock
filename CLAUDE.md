@@ -21,9 +21,7 @@ xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -desti
 ```
 
 - **プロジェクトは `PhotoDock/PhotoDock.xcodeproj`（repo ルートの1段下）**、ソースは隣の `PhotoDock/PhotoDock/`。repo ルートから叩くときは `-project` が必須（`scripts/arch-check.sh` の `APP` と CI も同じパス前提）
-- 確定済みのビルド設定: iOS 18.0 / Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`（既定 MainActor だと Core protocol が暗黙隔離され恒常ルール3と衝突するため）/ bundle ID `com.yosshi0127.photodock` / 署名は個人チーム `TK8X68MS6W`（会社チーム `R6YNJ9HW8W` を使わない）
-- **未了**: swift-dependencies の SPM 追加、層ディレクトリ（`Core/` `Infrastructure/` `Features/` `App/DI/`）の作成
-- 初回ビルドは2分超かかることがある（バックグラウンド実行推奨）
+- iOS 18.0 / Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`（既定 MainActor だと Core protocol が暗黙隔離され恒常ルール3と衝突するので戻さない）
 - SourceKit の diagnostics（`No such module 'Dependencies'` 等）はインデックス誤検知が多い。真実は xcodebuild の結果
 - **Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する（brief 参照）
 
@@ -40,13 +38,6 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 ```
 
 同じ2つ + テストは CI（`.github/workflows/ci.yml`）でも回る。
-
-## GitHub
-
-- リポジトリは個人アカウント **yosshi0127-ios**（private）に作る。会社アカウントと混在する端末なので、
-  git identity は `--local` で `yosshi0127-ios <105440671+yosshi0127-ios@users.noreply.github.com>` を設定済み・
-  credential も このリポジトリだけ `!gh auth git-credential` を使う設定済み（コピー元と同じ構成）
-- push 前に `gh auth status` で active が yosshi0127-ios であることを確認する
 
 ## スキルカタログ（該当する話題では必ず Skill ツールで発火する）
 
