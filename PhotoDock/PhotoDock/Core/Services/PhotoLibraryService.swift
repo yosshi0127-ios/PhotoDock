@@ -15,5 +15,6 @@ protocol PhotoLibraryService: Sendable {
 
     /// 画像のみ・撮影日時の新しい順。
     /// 権限がないと空配列が返る（0枚と区別できないので、呼ぶ側が先に権限を見る）。
+    /// 数万枚を走査するので、呼び出し元のスレッドを塞がないことは実装側の責任。
     func fetchAllAssetMetadata() async -> [AssetMetadata]
 }

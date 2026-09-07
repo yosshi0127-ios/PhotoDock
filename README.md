@@ -134,7 +134,20 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 **ディレクトリ名が規約のアンカーになっている。** `.swiftlint.yml` と `arch-check.sh` はパスの正規表現・実パスでルールを引くので、名前が1文字違うと**エラーではなく沈黙で検査が消える**。`Core/Services`（複数）、`Features/<機能>/UseCase`（単数）、`App/DI` の非対称に注意。加えて macOS は大文字小文字を区別しないので、`APP/DI` のような誤りは**ローカルでは通り Linux の CI だけ落ちる**（git のインデックス側の case も `git rm --cached -f` で直す必要がある）。
 
-**`nonisolated async` は呼び出し元の隔離を引き継ぐ。** `SWIFT_APPROACHABLE_CONCURRENCY = YES` のため、`@MainActor` の State から呼んだサービスのメソッドはメインスレッドで走る。数万枚の列挙を main で回すと UI が固まる。**未解決の課題**（`@concurrent` の適用を検証予定）。
+**`nonisolated async` は呼び出し元の隔離を引き継ぐ → 重い実装には `@concurrent` を付ける。** `SWIFT_APPROACHABLE_CONCURRENCY = YES`（Swift 6.2 の `NonisolatedNonsendingByDefault`）のため、`@MainActor` の State から `await` したサービスのメソッドは**メインスレッドで走る**。以前の Swift は自動でグローバルエグゼキュータへ退避していたので、挙動が逆転している。
+
+実測で確認した事実（`pthread_main_np()` でログ）:
+
+| 実装 | 実行スレッド |
+|---|---|
+| `func fetchAllAssetMetadata() async` | **main**（数万枚の列挙が UI を塞ぐ） |
+| `@concurrent func fetchAllAssetMetadata() async` | main 以外 |
+
+`@concurrent` を付けた実装は `nonisolated async` の protocol 要件を問題なく満たす（Core の protocol に隔離を書けない恒常ルール3と両立する）。
+
+**運用ルール: 重い同期処理を含むサービス実装のメソッドにだけ `@concurrent` を付ける。** 安いメソッド（`currentAccess()` のような即答する読み取り）には付けない — 不要なスレッド跳躍を減らすことが Swift 6.2 のこの変更の目的なので、全部に付けると台無しになる。第2段で増える `pixelSource` / `ocr` / `codes` はいずれも重い側。
+
+なお `Thread.isMainThread` と `Thread.current` は Swift 6 の async 文脈では使用禁止（タスクがスレッドを移りうるため意味が曖昧になる）。計測には `pthread_main_np()` を使う。
 
 **Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する。
 

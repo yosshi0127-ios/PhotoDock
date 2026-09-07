@@ -31,6 +31,10 @@ struct PhotoKitPhotoLibraryService: PhotoLibraryService {
         Self.access(from: await PHPhotoLibrary.requestAuthorization(for: .readWrite))
     }
 
+    /// `@concurrent` が必須。これが無いと呼び出し元の隔離を引き継ぐため
+    /// （`SWIFT_APPROACHABLE_CONCURRENCY = YES`）、`@MainActor` の State から呼ぶと
+    /// 全件の列挙がメインスレッドで走って UI が固まる（実測で確認済み）。
+    @concurrent
     func fetchAllAssetMetadata() async -> [AssetMetadata] {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
