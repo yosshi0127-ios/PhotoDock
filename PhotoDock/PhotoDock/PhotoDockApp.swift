@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct PhotoDockApp: App {
+    init() {
+        LiveDependencies.prepare()
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
     }
 }

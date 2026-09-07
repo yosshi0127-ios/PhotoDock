@@ -409,6 +409,7 @@
 				DEVELOPMENT_TEAM = TK8X68MS6W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "カメラロール全体を診断して、見られたら困る写真を洗い出します。写真は端末内でのみ処理し、外部に送信しません。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -441,6 +442,7 @@
 				DEVELOPMENT_TEAM = TK8X68MS6W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "カメラロール全体を診断して、見られたら困る写真を洗い出します。写真は端末内でのみ処理し、外部に送信しません。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
