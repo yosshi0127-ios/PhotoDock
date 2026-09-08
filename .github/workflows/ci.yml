@@ -8,10 +8,19 @@ name: CI
 # arch-check は bash + grep だけなので Linux ランナーに置く（macOS ランナーは課金レートが高いため、
 # 層違反の検出は先に安いジョブで落とす）。
 
+# ドキュメントだけの変更では起動しない。lint / arch-check / テストはいずれも Swift のコードしか
+# 見ないので検証できることが無く、それでいて macOS ジョブは4〜5分かかる（swift-syntax のビルド）。
+# その間に走っているコード変更の検証が cancel-in-progress で打ち切られるのを避ける。
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
 
 concurrency:
