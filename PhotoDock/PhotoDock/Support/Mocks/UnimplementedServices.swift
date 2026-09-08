@@ -19,3 +19,9 @@ struct UnimplementedPhotoLibraryService: PhotoLibraryService {
         fatalError("UnimplementedPhotoLibraryService.fetchAllAssetMetadata() が呼ばれた（テストで上書きすること）")
     }
 }
+
+struct UnimplementedPixelSourceService: PixelSourceService {
+    func fetchImageData(for id: String) async -> PixelSourceOutcome {
+        fatalError("UnimplementedPixelSourceService.fetchImageData(for:) が呼ばれた（テストで上書きすること）")
+    }
+}

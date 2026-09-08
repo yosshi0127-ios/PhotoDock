@@ -16,11 +16,12 @@ import Testing
 ///
 /// 静的な検査（liveValue の右辺が Stub/Noop/Unimplemented でないこと）は `scripts/arch-check.sh` が持つ。
 struct LiveDependenciesSmokeTests {
-    @Test("全 liveValue（1点）が解決でき、本番実装が入っている")
+    @Test("全 liveValue（2点）が解決でき、本番実装が入っている")
     func resolvesAllLiveValues() {
         var values = DependencyValues()
         values.context = .live
 
         #expect(values.photoLibrary is PhotoKitPhotoLibraryService)
+        #expect(values.pixelSource is PhotoKitPixelSourceService)
     }
 }
