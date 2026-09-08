@@ -25,11 +25,39 @@ Features ──▶ Core ◀── Infrastructure
 | `Core/Repositories` | 永続化（〜を覚える）の protocol | — |
 | `Core/Policy` | 判断（入力 → 結論）の純粋関数 | — |
 | `Infrastructure/` | protocol の実装。実 I/O | 実 I/O |
-| `Features/<機能>/UseCase` | 段取り。具体 struct | `@Dependency`（**唯一の場所**） |
-| `Features/<機能>/State` | `@MainActor @Observable`。画面の状態 | UseCase のみ |
-| `Features/<機能>/View` | SwiftUI | なし（State を生成するだけ） |
+| `Features/UseCases` | 段取り。具体 struct | `@Dependency`（**唯一の場所**） |
+| `Features/Screens/<画面>` の State | `@MainActor @Observable`。画面の状態 | UseCase のみ |
+| `Features/Screens/<画面>` の View | SwiftUI | なし（State を生成するだけ） |
 | `App/DI` | 依存の登録（3値） | 両側を知る |
 | `Support/Mocks` | Stub / Unimplemented | — |
+
+### Features の中の分け方
+
+```
+Features/
+  UseCases/          段取り。画面をまたいで共有する
+  Screens/
+    Home/            1画面 = 1ディレクトリ（State / View / その画面専用の部品）
+    PhotoCheck/
+```
+
+機能名（Scan / Setting …）では切らず、**`UseCases` と `Screens` の2つだけで切る**。理由は3つ。
+
+- 機能の境界は揺れる。「権限がないときの画面は Scan 機能か」「設定は機能なのか」は決めても後から動くので、ディレクトリを作り直し続けることになる
+- **ディレクトリは何も強制しない。** 同一モジュールなので `Features/Scan/` を作っても隣の `Features/Setting/` から普通に参照できる。本当に境界を効かせたいなら SPM モジュールに切るしかない
+- ファイルを探すときの手がかりは「どの画面か」で、「どの機能か」ではない
+
+UseCase は**画面間では共有する**（`ScanImageUseCase` は診断ホームと1枚チェックの両方から呼ばれる）。`Core/Services` と `Core/Policy` はアプリ全体の共有物。
+
+「この処理はどこに置くか」で迷ったときの対応:
+
+| 迷い | 置き場所 |
+|---|---|
+| 2つの画面が同じ段取りを踏む | `UseCases/` の1本を両方から呼ぶ（コピーしない） |
+| 段取りの中に判断（危険か・どう数えるか）が混ざっている | 判断を `Core/Policy` に下げる |
+| 表示のための計算しかしていない | その画面の State |
+
+なお `@Dependency` を許可する lint の例外は **`UseCases?/` というパスの正規表現**でしかない。UseCase をこの名前以外のディレクトリに置くと `dependency_only_in_usecase` で落ちる。
 
 ### `Core/` が Foundation しか import できない理由
 
@@ -132,7 +160,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 **ユニットテストはホストアプリのプロセスで動く。** `TEST_HOST` が指定されているので、テスト実行時にアプリが普通に起動し、`WindowGroup` の中身が組まれ、View の `.task` が発火する。そこで依存を触るとテスト文脈なので `testValue`（Unimplemented）を踏み、**テストが1件も走る前にプロセスごと死ぬ**。対策として `PhotoDockApp` はユニットテスト時に画面を組まない（`NSClassFromString("XCTestCase")` で判定）。UI テストは別プロセスから起動するので該当しない。
 
-**ディレクトリ名が規約のアンカーになっている。** `.swiftlint.yml` と `arch-check.sh` はパスの正規表現・実パスでルールを引くので、名前が1文字違うと**エラーではなく沈黙で検査が消える**。`Core/Services`（複数）、`Features/<機能>/UseCase`（単数）、`App/DI` の非対称に注意。加えて macOS は大文字小文字を区別しないので、`APP/DI` のような誤りは**ローカルでは通り Linux の CI だけ落ちる**（git のインデックス側の case も `git rm --cached -f` で直す必要がある）。
+**ディレクトリ名が規約のアンカーになっている。** `.swiftlint.yml` と `arch-check.sh` はパスの正規表現・実パスでルールを引くので、名前が1文字違うと**エラーではなく沈黙で検査が消える**。`Core/Services`・`Core/Policy`・`Features/`・`App/DI` は実際にこの綴りでないと引っかからない（`UseCases?` だけは単複どちらでも通るようにしてある）。加えて macOS は大文字小文字を区別しないので、`APP/DI` のような誤りは**ローカルでは通り Linux の CI だけ落ちる**（git のインデックス側の case も `git rm --cached -f` で直す必要がある）。
 
 **`nonisolated async` は呼び出し元の隔離を引き継ぐ → 重い実装には `@concurrent` を付ける。** `SWIFT_APPROACHABLE_CONCURRENCY = YES`（Swift 6.2 の `NonisolatedNonsendingByDefault`）のため、`@MainActor` の State から `await` したサービスのメソッドは**メインスレッドで走る**。以前の Swift は自動でグローバルエグゼキュータへ退避していたので、挙動が逆転している。
 
@@ -153,7 +181,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 ## 現在の実装状況
 
-**第1段スキャン（メタデータ全件列挙）は画面まで完成。第2段は判断層まで完成。**
+**第1段スキャン（メタデータ全件列挙）は画面まで完成。第2段（1枚の診断）は UseCase まで完成、画面はこれから。**
 
 依存は3本、いずれも3点セット + live スモークで担保:
 
@@ -164,7 +192,8 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 | `ocr` | 文字認識（座標変換込み） | 第2段 |
 
 - Policy 2本: `LibraryInventoryPolicy`（集計）/ `FindingPolicy`（分類・severity・マスク）
+- UseCase 3本: `ScanLibraryMetadataUseCase`（第1段）/ `ScanImageUseCase`（画像データ1枚 → 所見）/ `ScanPhotoUseCase`（ライブラリの1枚 → 所見。中身は `ScanImageUseCase` に委譲）
 - 診断ホームの State / View（第1段の結果）。実機で権限ダイアログの文言と実データの集計、ダーク/ライト両モードを確認済み
-- ユニットテスト46件。座標変換は合成画像を本物の Vision に通して固定してある
+- ユニットテスト53件。座標変換は合成画像を本物の Vision に通して固定してある
 
-**残り: 1枚を診断する UseCase / 所見インデックスの永続化 / 全量スキャン（N 並列・進捗）。** brief の Phase 1 の本体。
+**残り: 1枚チェックの画面 / 所見インデックスの永続化 / 全量スキャン（N 並列・進捗）。** brief の Phase 1 の本体。
