@@ -63,10 +63,11 @@ extension DependencyValues {
 - `testValue` は `Support/Mocks/UnimplementedServices.swift` に `Unimplemented<名前>` を追加（fatalError）
 - Stub は `Support/Mocks/Stub<名前>.swift`
 
-### ④ UseCase（Features/<機能>/UseCase/）
+### ④ UseCase（Features/UseCases/）
 
 - **具体 struct**（protocol にしない）。生の依存（`@Dependency`）を持てる**唯一の場所**
 - 呼び口は `callAsFunction`
+- 画面をまたいで共有する。lint の例外は `UseCases?/` というパスにアンカーしているので、この名前のディレクトリ以外に置くと落ちる
 
 ```swift
 import Foundation
@@ -82,7 +83,7 @@ struct DoSomethingUseCase: Sendable {
 }
 ```
 
-### ⑤ State（Features/<機能>/State/）
+### ⑤ State（Features/Screens/<画面>/）
 
 - `@MainActor @Observable final class`。**UseCase だけを持つ**（`@Dependency` 禁止・import Dependencies 不要)
 
@@ -103,7 +104,7 @@ final class FooState {
 }
 ```
 
-### ⑥ View（Features/<機能>/View/）
+### ⑥ View（Features/Screens/<画面>/）
 
 - 依存ノータッチ。`@State private var state = FooState()` で State を生成するだけ
 - 色・フォントは `Support/Theme/`（`Color.warningAccent` 等）、直リテラル禁止
