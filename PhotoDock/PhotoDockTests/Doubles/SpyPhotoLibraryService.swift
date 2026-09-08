@@ -1,9 +1,8 @@
 //
-//  TestDoubles.swift
+//  SpyPhotoLibraryService.swift
 //  PhotoDockTests
 //
 
-import Foundation
 @testable import PhotoDock
 
 /// 呼び出し回数を記録する `PhotoLibraryService`。
@@ -37,27 +36,4 @@ actor SpyPhotoLibraryService: PhotoLibraryService {
         fetchCallCount += 1
         return stubbedAssets
     }
-}
-
-extension AssetMetadata {
-    /// テスト用の組み立てヘルパー。関心のあるフィールドだけ指定する。
-    static func stub(
-        id: String = "asset",
-        creationDate: Date? = nil,
-        modificationDate: Date? = nil,
-        coordinate: GeoCoordinate? = nil,
-        isScreenshot: Bool = false
-    ) -> AssetMetadata {
-        AssetMetadata(
-            id: id,
-            creationDate: creationDate,
-            modificationDate: modificationDate,
-            coordinate: coordinate,
-            isScreenshot: isScreenshot
-        )
-    }
-}
-
-extension GeoCoordinate {
-    static let anywhere = GeoCoordinate(latitude: 35.681236, longitude: 139.767125)
 }

@@ -260,8 +260,3 @@ struct FindingPolicyTests {
         }
     }
 }
-
-private extension Region {
-    /// 領域そのものを検証しないテストで使う置き場所
-    static let test = Region(x: 0, y: 0, width: 1, height: 1)
-}
