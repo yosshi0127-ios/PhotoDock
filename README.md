@@ -153,10 +153,18 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 ## 現在の実装状況
 
-**第1段スキャン（メタデータ全件列挙）まで完成。**
+**第1段スキャン（メタデータ全件列挙）は画面まで完成。第2段は判断層まで完成。**
 
-- `photoLibrary` 依存の3点セット、集計 Policy、UseCase、診断ホームの State / View
-- ユニットテスト9件（Policy 4 / UseCase 4 / live スモーク 1）+ UI 起動テスト
-- 実機同等の確認済み: 権限ダイアログの文言、`PHAsset` の実データでの集計、ダーク/ライト両モード
+依存は3本、いずれも3点セット + live スモークで担保:
 
-**第2段（ピクセルスキャン: OCR / QR / 所見インデックス）は未着手。** brief の Phase 1 の本体。
+| 依存 | 役割 | 段 |
+|---|---|---|
+| `photoLibrary` | メタデータ全件列挙 + 権限 | 第1段 |
+| `pixelSource` | 画像バイト列（iCloud 判定込み） | 第2段 |
+| `ocr` | 文字認識（座標変換込み） | 第2段 |
+
+- Policy 2本: `LibraryInventoryPolicy`（集計）/ `FindingPolicy`（分類・severity・マスク）
+- 診断ホームの State / View（第1段の結果）。実機で権限ダイアログの文言と実データの集計、ダーク/ライト両モードを確認済み
+- ユニットテスト46件。座標変換は合成画像を本物の Vision に通して固定してある
+
+**残り: 1枚を診断する UseCase / 所見インデックスの永続化 / 全量スキャン（N 並列・進捗）。** brief の Phase 1 の本体。
