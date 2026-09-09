@@ -177,7 +177,21 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 なお `Thread.isMainThread` と `Thread.current` は Swift 6 の async 文脈では使用禁止（タスクがスレッドを移りうるため意味が曖昧になる）。計測には `pthread_main_np()` を使う。
 
+**`addTaskUnlessCancelled` は親タスクのキャンセルでは追加を拒否しない。** `AsyncStream` + `TaskGroup` で「N 並列を保ちながら完了順に流す」形を書くとき、消費側の離脱で処理を止めるには**自分で `Task.isCancelled` を見て `break` する**必要がある。
+
+実測（200枚を2並列、5枚読んで離脱）:
+
+| 補充の書き方 | 離脱後 |
+|---|---|
+| `group.addTask` | **200枚すべて処理**（止まらない） |
+| `group.addTaskUnlessCancelled` | **50枚以上処理して増え続ける**（うち44枚はキャンセル済みで開始） |
+| `if Task.isCancelled { break }` | **8枚で停止**（待っても増えない） |
+
+子タスクには `Task.isCancelled == true` が伝播しているのに、グループへの追加は通る。`Task.sleep` はキャンセルで即座に返るので、**キャンセル後ほど速く回って被害が大きくなる**。テストの Spy も `Task.sleep` を使うと「止まった」と「速く走り切った」を区別できないので、待ち切る実装にしてある。
+
 **Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する。
+
+**Foundation Models（オンデバイス LLM）もシミュレータで動かない。しかも `availability` は `.available` と嘘をつく。** 実際に `respond` すると safety モデル（`com.apple.fm.language.instruct_300m.safety`）が見つからず `GenerationError` になる。macOS 26.5 実機では動く。availability の確認だけでなく、呼び出しの失敗も握って続行する設計が要る。
 
 ## 現在の実装状況
 
