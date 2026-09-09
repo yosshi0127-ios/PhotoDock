@@ -82,6 +82,43 @@ struct FindingPolicyTests {
         #expect(kind(of: "access token ghp_0000000000") == .credential)
     }
 
+    /// 辞書は増やさず、正規化で表記の揺れだけを吸収する
+    @Test("ラベル語の表記揺れを正規化で吸収する", arguments: [
+        "API_KEY abcdefghijklmnop",
+        "api-key: abcdefghijklmnop",
+        "Ａｐｉ　Ｋｅｙ ABCDEFGHIJKLMNOP",
+        "API・キー abcdefghijklmnop"
+    ])
+    func credentialLabelNormalization(_ text: String) {
+        #expect(kind(of: text) == .credential)
+    }
+
+    /// 全角は英数だけを半角に寄せる。Foundation の .fullwidthToHalfwidth は
+    /// カタカナも半角にするので「パスワード」→「ﾊﾟｽﾜｰﾄﾞ」となり既存ラベルが全滅する
+    @Test("正規化してもカタカナのラベルは壊れない")
+    func normalizationKeepsKatakana() {
+        #expect("パスワード".normalizedForLabelMatch() == "パスワード")
+        #expect("API_KEY".normalizedForLabelMatch() == "apikey")
+        #expect("Ａｐｉ　Ｋｅｙ".normalizedForLabelMatch() == "apikey")
+    }
+
+    /// ラベル辞書は網羅できないので、値の書式が下支えになる。
+    /// 機械が発行するトークンはプレフィックスが業界固有で誤検出しにくい
+    @Test("機械が発行するトークンはラベルなしでも認証情報", arguments: [
+        "sk-proj-abcdefghijklmnopqrstuvwxyz",
+        "ghp_abcdefghijklmnopqrstuvwxyz1234",
+        "AKIAIOSFODNN7EXAMPLE",
+        "xoxb-1234567890-abcdefghij",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc",
+        "-----BEGIN RSA PRIVATE KEY-----"
+    ])
+    func credentialValuePatterns(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .credential)
+        #expect(match?.severity == .danger)
+    }
+
     // MARK: - 住所
 
     @Test("市区町村と番地が揃えば住所。都道府県は要求しない", arguments: [
@@ -215,6 +252,19 @@ struct FindingPolicyTests {
     func maskedCredential() {
         #expect(sut.masked("パスワード: hunter2", as: .credential) == "パスワード ********")
         #expect(sut.masked("パスワード: aVeryLongPassphrase", as: .credential) == "パスワード ********")
+    }
+
+    /// 照合は正規化した形で行うが、表示には元の表記を出す
+    @Test("マスクに出るのは照合用の小文字ではなく元の表記")
+    func maskedCredentialUsesDisplayForm() {
+        #expect(sut.masked("APIキー sk-test-000000000000", as: .credential) == "APIキー ********")
+        #expect(sut.masked("api_key: hunter2", as: .credential) == "API Key ********")
+    }
+
+    /// 値の書式だけで拾った行にはラベルが無い
+    @Test("ラベルの無い認証情報は伏せ字だけを返す")
+    func maskedCredentialWithoutLabel() {
+        #expect(sut.masked("sk-proj-abcdefghijklmnopqrstuvwxyz", as: .credential) == "********")
     }
 
     @Test("メールはローカル部の先頭1文字とドメインを残し、周りの文字はそのまま")

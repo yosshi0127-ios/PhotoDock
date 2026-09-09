@@ -52,6 +52,8 @@ struct FindingPolicy: Sendable {
     /// - `〒150-0041 渋谷区神南1-2-3` は住所。郵便番号より情報量が多いほうを取る
     func classify(_ text: String) -> (kind: FindingKind, severity: Severity)? {
         if hasCardNumber(text) { return (.cardNumber, .danger) }
+        // 値の書式はラベルより確実なので先に試す
+        if hasCredentialValue(text) { return (.credential, .danger) }
         if hasCredentialLabel(text) { return (.credential, .danger) }
         if text.contains(/\b[A-Z]{2}[0-9]{7}\b/) { return (.identityDocumentNumber, .caution) }
         if text.contains(emailPattern) { return (.email, .caution) }
@@ -98,10 +100,24 @@ struct FindingPolicy: Sendable {
         matchedCredentialLabel(in: text) != nil
     }
 
-    /// 空白を除いてから照合する（OCR は「API キー」のように空白込みで返すことがある）
-    private func matchedCredentialLabel(in text: String) -> String? {
-        let compact = text.lowercased().filter { !$0.isWhitespace }
-        return rules.credentialLabels.first { compact.contains($0) }
+    /// 入力にもラベルと同じ正規化を通してから照合する
+    /// （`API_KEY` / `api-key` / `API キー` がどれも `apikey` に寄る）
+    private func matchedCredentialLabel(in text: String) -> CredentialLabel? {
+        let normalized = text.normalizedForLabelMatch()
+        return rules.credentialLabels.first { normalized.contains($0.pattern) }
+    }
+
+    /// ラベルが無くても認証情報と断定できる値の書式。
+    /// 機械が発行するトークンはプレフィックスが業界固有なので、誤検出はほぼ起きない。
+    /// ラベル辞書では表記揺れを網羅できないので、こちらが下支えになる。
+    private func hasCredentialValue(_ text: String) -> Bool {
+        text.contains(/sk-[A-Za-z0-9_-]{16,}/)                              // OpenAI
+            || text.contains(/gh[pousr]_[A-Za-z0-9]{16,}/)                  // GitHub
+            || text.contains(/github_pat_[A-Za-z0-9_]{20,}/)                // GitHub（新形式）
+            || text.contains(/\bAKIA[0-9A-Z]{16}\b/)                        // AWS
+            || text.contains(/xox[baprs]-[A-Za-z0-9-]{10,}/)                // Slack
+            || text.contains(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./) // JWT
+            || text.contains(/-----BEGIN [A-Z ]*PRIVATE KEY-----/)          // PEM 秘密鍵
     }
 
     /// 市区町村の文字 + 番地パターン。都道府県は要求しない（省略されるのが普通）。
@@ -163,12 +179,13 @@ struct FindingPolicy: Sendable {
 
     /// ラベル語だけ残し、値は固定長で伏せる。
     /// 桁数を漏らさないために、実際の長さと無関係な固定長にしている。
+    /// ラベルが無い行（値の書式だけで拾った行）は伏せ字だけを返す。
     private func maskedCredential(_ text: String) -> String {
         guard let label = matchedCredentialLabel(in: text) else {
             return String(repeating: "*", count: 8)
         }
 
-        return "\(label) ********"
+        return "\(label.display) ********"
     }
 
     /// ローカル部の先頭1文字とドメインを残す（`yamada@example.com` → `y*****@example.com`）。

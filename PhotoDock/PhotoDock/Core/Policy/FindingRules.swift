@@ -14,13 +14,14 @@ struct FindingRules: Sendable {
     /// 郵便物・申込書はほぼ書かない。必須にすると「渋谷区神南1-2-3」が落ちる）
     let municipalityMarkers: Set<Character>
 
-    /// 認証情報のラベル語。順序 = 優先度。**マスク後の表示にもこの文字列が出る**。
-    /// 比較は「小文字化して空白を除いた入力」への部分一致なので、ここも空白なしで書く
-    /// （OCR が「API キー」と空白込みで読んでも拾うため）。
+    /// 認証情報のラベル語。順序 = 優先度。表示したい表記をそのまま書けばよい
+    /// （照合用の正規化は `CredentialLabel` が導出する）。
     /// Set にしないこと: 反復順序がプロセスごとに変わるため、複数一致した行の
     /// マスク結果が実行ごとに変わってしまう。
-    /// 短い一般語を入れてはいけない: 部分一致するため "pin" は "shopping" に当たる
-    let credentialLabels: [String]
+    /// 短い一般語を入れてはいけない: 部分一致するため "pin" は "shopping" に当たる。
+    /// **辞書で網羅することは原理的に不可能**（brief「検出する種類」参照）。
+    /// ここに無い語は取りこぼす前提で、値の書式による検出と併用する
+    let credentialLabels: [CredentialLabel]
 
     /// Luhn を適用する桁数の範囲（区切り記号を除去した後）
     let cardNumberDigits: ClosedRange<Int>
@@ -32,9 +33,19 @@ struct FindingRules: Sendable {
         minimumConfidence: 0.5,
         municipalityMarkers: ["市", "区", "町", "村"],
         credentialLabels: [
-            "パスワード", "パスコード", "暗証番号", "暗号化キー", "認証コード",
-            "apiキー", "アクセストークン", "秘密鍵", "リカバリーコード",
-            "password", "apikey", "accesstoken", "privatekey"
+            CredentialLabel("パスワード"),
+            CredentialLabel("パスコード"),
+            CredentialLabel("暗証番号"),
+            CredentialLabel("暗号化キー"),
+            CredentialLabel("認証コード"),
+            CredentialLabel("APIキー"),
+            CredentialLabel("アクセストークン"),
+            CredentialLabel("秘密鍵"),
+            CredentialLabel("リカバリーコード"),
+            CredentialLabel("Password"),
+            CredentialLabel("API Key"),
+            CredentialLabel("Access Token"),
+            CredentialLabel("Private Key")
         ],
         cardNumberDigits: 13...19,
         maskedTrailingDigits: 4
