@@ -13,6 +13,12 @@ struct ScanHomeView: View {
     var body: some View {
         content
             .padding()
+            .navigationTitle("写真ドック")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink("1枚チェック") { PhotoDetailView() }
+                }
+            }
             .task { await state.startScan() }
     }
 
@@ -22,15 +28,19 @@ struct ScanHomeView: View {
         case .idle, .scanning:
             ProgressView("カメラロールを確認しています")
 
-        case let .loaded(.scanned(access, inventory)):
+        // ラベルを省くと Preview のコード変換だけが壊れる（通常ビルドは通る）
+        case let .loaded(.scanned(access: access, inventory: inventory)):
             ScanSummaryView(inventory: inventory, access: access)
 
-        case let .loaded(.unavailable(access)):
+        case let .loaded(.unavailable(access: access)):
             ScanUnavailableView(access: access)
         }
     }
 }
 
+// toolbar と navigationTitle は NavigationStack の中でしか描かれないので Preview でも包む
 #Preview {
-    ScanHomeView()
+    NavigationStack {
+        ScanHomeView()
+    }
 }
