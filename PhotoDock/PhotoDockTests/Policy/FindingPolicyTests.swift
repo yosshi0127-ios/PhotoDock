@@ -51,7 +51,10 @@ struct FindingPolicyTests {
         "パスワード: hunter2",
         "暗号化キー AbCd1234",
         "Password: correcthorse",
-        "暗証番号 1234"
+        "暗証番号 1234",
+        "APIキー sk-test-000000000000",
+        "アクセストークン ghp_0000000000",
+        "秘密鍵 -----BEGIN PRIVATE KEY-----"
     ])
     func credentialLabels(_ text: String) {
         let match = sut.classify(text)
@@ -70,6 +73,13 @@ struct FindingPolicyTests {
     func credentialAvoidsShortWords() {
         #expect(kind(of: "shopping list") == nil)
         #expect(kind(of: "monkey key") == nil)
+    }
+
+    /// OCR は「API キー」のように空白込みで返すことがある
+    @Test("ラベル語の途中に空白が入っていても拾う")
+    func credentialIgnoresWhitespaceInLabel() {
+        #expect(kind(of: "API キー sk-test-000000000000") == .credential)
+        #expect(kind(of: "access token ghp_0000000000") == .credential)
     }
 
     // MARK: - 住所
@@ -176,6 +186,28 @@ struct FindingPolicyTests {
     @Test("住所は数字を全部伏せる")
     func maskedAddress() {
         #expect(sut.masked("渋谷区神南1-2-3", as: .address) == "渋谷区神南*-*-*")
+    }
+
+    /// Character.isNumber は漢数字にも true を返す。それで伏せると
+    /// 「東京都千代田区」が「東*都*代田区」になり、どこの住所か分からなくなる
+    @Test("地名の漢数字は伏せない", arguments: [
+        ("東京都千代田区霞が関1-1-1", "東京都千代田区霞が関*-*-*"),
+        ("三田1-2-3", "三田*-*-*"),
+        ("八王子市万町4-5", "八王子市万町*-*")
+    ])
+    func kanjiNumeralsSurviveMasking(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .address) == expected)
+    }
+
+    @Test("全角の算用数字は伏せる")
+    func fullWidthDigitsAreMasked() {
+        #expect(sut.masked("渋谷区神南１-２-３", as: .address) == "渋谷区神南*-*-*")
+    }
+
+    /// 下4桁だけで町域が特定できるので、カード番号のように末尾を残さない
+    @Test("郵便番号は全桁伏せる")
+    func maskedPostalCode() {
+        #expect(sut.masked("〒150-0041", as: .postalCode) == "〒***-****")
     }
 
     /// 桁数を漏らさないため、実際の長さと無関係な固定長にする

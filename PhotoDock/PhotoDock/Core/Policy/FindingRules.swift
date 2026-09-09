@@ -14,10 +14,12 @@ struct FindingRules: Sendable {
     /// 郵便物・申込書はほぼ書かない。必須にすると「渋谷区神南1-2-3」が落ちる）
     let municipalityMarkers: Set<Character>
 
-    /// 認証情報のラベル語（小文字で保持し、比較時に入力も小文字化する）。順序 = 優先度。
+    /// 認証情報のラベル語。順序 = 優先度。**マスク後の表示にもこの文字列が出る**。
+    /// 比較は「小文字化して空白を除いた入力」への部分一致なので、ここも空白なしで書く
+    /// （OCR が「API キー」と空白込みで読んでも拾うため）。
     /// Set にしないこと: 反復順序がプロセスごとに変わるため、複数一致した行の
     /// マスク結果が実行ごとに変わってしまう。
-    /// 短い一般語を入れてはいけない: 小文字で部分一致するため "pin" は "shopping" に当たる
+    /// 短い一般語を入れてはいけない: 部分一致するため "pin" は "shopping" に当たる
     let credentialLabels: [String]
 
     /// Luhn を適用する桁数の範囲（区切り記号を除去した後）
@@ -30,7 +32,9 @@ struct FindingRules: Sendable {
         minimumConfidence: 0.5,
         municipalityMarkers: ["市", "区", "町", "村"],
         credentialLabels: [
-            "パスワード", "パスコード", "暗証番号", "暗号化キー", "認証コード", "password"
+            "パスワード", "パスコード", "暗証番号", "暗号化キー", "認証コード",
+            "apiキー", "アクセストークン", "秘密鍵", "リカバリーコード",
+            "password", "apikey", "accesstoken", "privatekey"
         ],
         cardNumberDigits: 13...19,
         maskedTrailingDigits: 4

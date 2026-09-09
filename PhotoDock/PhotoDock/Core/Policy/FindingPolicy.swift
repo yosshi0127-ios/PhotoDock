@@ -73,7 +73,7 @@ struct FindingPolicy: Sendable {
     private func digitRuns(in text: String) -> [String] {
         text
             .filter { !$0.isWhitespace && $0 != "-" }
-            .split { !$0.isNumber }
+            .split { !Self.isMaskableDigit($0) }
             .map(String.init)
     }
 
@@ -98,9 +98,10 @@ struct FindingPolicy: Sendable {
         matchedCredentialLabel(in: text) != nil
     }
 
+    /// 空白を除いてから照合する（OCR は「API キー」のように空白込みで返すことがある）
     private func matchedCredentialLabel(in text: String) -> String? {
-        let lowered = text.lowercased()
-        return rules.credentialLabels.first { lowered.contains($0) }
+        let compact = text.lowercased().filter { !$0.isWhitespace }
+        return rules.credentialLabels.first { compact.contains($0) }
     }
 
     /// 市区町村の文字 + 番地パターン。都道府県は要求しない（省略されるのが普通）。
@@ -129,10 +130,12 @@ struct FindingPolicy: Sendable {
             maskedCredential(text)
         case .email:
             maskedEmail(text)
-        case .address:
-            // 番地を残さない。漢字はそのまま残るので「どこの住所か」の識別はできる
+        case .address, .postalCode:
+            // 番地を残さない。漢字はそのまま残るので「どこの住所か」の識別はできる。
+            // 郵便番号も末尾を残さない（下4桁だけで町域が特定できるため、
+            // 「どのカードか」を示すカード番号の末尾4桁とは性質が違う）
             maskedDigits(text, keepingTrailing: 0)
-        case .cardNumber, .identityDocumentNumber, .phoneNumber, .postalCode:
+        case .cardNumber, .identityDocumentNumber, .phoneNumber:
             maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
         }
     }
@@ -140,15 +143,22 @@ struct FindingPolicy: Sendable {
     /// 数字だけを伏せ、末尾の指定桁数だけ残す。区切り記号と文字はそのまま
     /// （`4111 1111 1111 1111` → `**** **** **** 1111`）。
     private func maskedDigits(_ text: String, keepingTrailing keepCount: Int) -> String {
-        let digitCount = text.count { $0.isNumber }
+        let digitCount = text.count { Self.isMaskableDigit($0) }
         var seen = 0
 
         return String(text.map { character in
-            guard character.isNumber else { return character }
+            guard Self.isMaskableDigit(character) else { return character }
 
             seen += 1
             return seen > digitCount - keepCount ? character : "*"
         })
+    }
+
+    /// 伏せるのは算用数字（半角・全角）だけ。
+    /// `Character.isNumber` は漢数字にも true を返すので、それで判定すると
+    /// 地名（千代田・京都・三田・六本木…）の漢字まで伏せてしまう。
+    private static func isMaskableDigit(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { $0.properties.numericType == .decimal }
     }
 
     /// ラベル語だけ残し、値は固定長で伏せる。
