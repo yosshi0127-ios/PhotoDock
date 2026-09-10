@@ -69,6 +69,29 @@ struct VisionOCRServiceTests {
         #expect(results.isEmpty)
     }
 
+    // MARK: - 前段（文字らしい矩形の有無で OCR を省く）
+
+    /// 前段が文字を落とすと、その写真は OCR に届かず所見ゼロになる。
+    /// 「速いが見逃す」は製品として成り立たないので、文字入りが通ることを固定する
+    @Test("文字のある画像は前段を通過して OCR に回る")
+    func prefilterPassesImagesWithText() async throws {
+        let image = try #require(VisionOCRService.decode(try await cardImageData(), maxPixelSize: 1_024))
+
+        #expect(VisionOCRService.containsTextRectangles(in: image))
+    }
+
+    /// 大半の写真には文字が無い。ここを弾けるかどうかが 3 倍速の正体
+    @Test("文字のない画像は前段で止まる")
+    func prefilterStopsImagesWithoutText() async throws {
+        // stub-1 は StubPixelSourceService が文字なしで描く白地の画像
+        guard case let .data(data) = await pixels.fetchImageData(for: "stub-1") else {
+            throw TestError.fixtureUnavailable
+        }
+        let image = try #require(VisionOCRService.decode(data, maxPixelSize: 1_024))
+
+        #expect(!VisionOCRService.containsTextRectangles(in: image))
+    }
+
     private enum TestError: Error {
         case fixtureUnavailable
     }
