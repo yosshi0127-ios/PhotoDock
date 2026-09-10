@@ -22,7 +22,8 @@ struct FullScanView: View {
         .padding()
         .navigationTitle("診断")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await state.start(assetIDs: assetIDs, quality: quality) }
+        // .task は一覧から戻るたびに走るので、自動開始は State 側で一度きりに絞る
+        .task { await state.startIfNeeded(assetIDs: assetIDs, quality: quality) }
     }
 
     @ViewBuilder
@@ -38,13 +39,23 @@ struct FullScanView: View {
         case let .finished(summary):
             result(summary)
             ScanCountsView(summary: summary)
-            Button("もう一度診断", action: rescan)
+
+            if !state.flagged.isEmpty {
+                NavigationLink("写真を確認する") {
+                    FlaggedPhotoGridView(photos: state.flagged)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            // action: に関数参照を直接渡すと Preview のコード変換だけが壊れる
+            // （ambiguous use of '__designTimeSelection'）。通常ビルドは通るので気づきにくい
+            Button("もう一度診断") { rescan() }
                 .buttonStyle(.bordered)
         }
     }
 
     private func rescan() {
-        Task { await state.start(assetIDs: assetIDs, quality: quality) }
+        Task { await state.restart(assetIDs: assetIDs, quality: quality) }
     }
 
     private func progress(_ summary: ScanSummary) -> some View {

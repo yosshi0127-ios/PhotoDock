@@ -19,6 +19,13 @@ struct StubPixelSourceService: PixelSourceService {
         return .data(data)
     }
 
+    /// Preview では縮小せず、診断と同じ合成画像をそのまま返す
+    /// （一覧の見た目を確認するのが目的で、サイズは問題にならない）
+    func fetchThumbnail(for id: String, maxPixelSize: Int) async -> Data? {
+        guard case let .data(data) = await fetchImageData(for: id) else { return nil }
+        return data
+    }
+
     /// "stub-42" → 42。想定外の id は 0 扱い
     private static func index(of id: String) -> Int {
         Int(id.split(separator: "-").last ?? "") ?? 0

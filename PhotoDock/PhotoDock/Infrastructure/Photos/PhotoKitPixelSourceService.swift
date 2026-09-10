@@ -6,6 +6,7 @@
 //
 
 import Photos
+import UIKit
 
 struct PhotoKitPixelSourceService: PixelSourceService {
     
@@ -33,6 +34,33 @@ struct PhotoKitPixelSourceService: PixelSourceService {
                 } else {
                     continuation.resume(returning: .missing)
                 }
+            }
+        }
+    }
+
+    /// 一覧用の縮小画像。JPEG にするのはグリッドに数百枚並べるため
+    /// （PNG は非圧縮に近く、サムネイルでもメモリを食う）。
+    @concurrent
+    func fetchThumbnail(for id: String, maxPixelSize: Int) async -> Data? {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+            return nil
+        }
+
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = false   // 契約: ダウンロードしない
+        options.resizeMode = .fast
+        // 既定の .opportunistic は「低品質 → 高品質」で複数回コールバックが来る。
+        // continuation を二度 resume するとクラッシュするので1回に固定する
+        options.deliveryMode = .highQualityFormat
+
+        return await withCheckedContinuation { continuation in
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: CGSize(width: maxPixelSize, height: maxPixelSize),
+                contentMode: .aspectFill,
+                options: options
+            ) { image, _ in
+                continuation.resume(returning: image?.jpegData(compressionQuality: 0.8))
             }
         }
     }

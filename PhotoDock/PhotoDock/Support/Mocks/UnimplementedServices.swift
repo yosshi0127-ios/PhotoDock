@@ -26,6 +26,10 @@ struct UnimplementedPixelSourceService: PixelSourceService {
     func fetchImageData(for id: String) async -> PixelSourceOutcome {
         fatalError("UnimplementedPixelSourceService.fetchImageData(for:) が呼ばれた（テストで上書きすること）")
     }
+
+    func fetchThumbnail(for id: String, maxPixelSize: Int) async -> Data? {
+        fatalError("UnimplementedPixelSourceService.fetchThumbnail(for:maxPixelSize:) が呼ばれた（テストで上書きすること）")
+    }
 }
 
 struct UnimplementedOCRService: OCRService {

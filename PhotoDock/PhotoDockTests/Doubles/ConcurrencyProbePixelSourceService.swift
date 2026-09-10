@@ -43,4 +43,9 @@ actor ConcurrencyProbePixelSourceService: PixelSourceService {
         running -= 1
         return stubbedOutcome
     }
+
+    func fetchThumbnail(for id: String, maxPixelSize: Int) async -> Data? {
+        guard case let .data(data) = stubbedOutcome else { return nil }
+        return data
+    }
 }

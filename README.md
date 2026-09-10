@@ -158,6 +158,13 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 **SourceKit の diagnostics は誤検知が多い。** `Cannot find type ...` や `No such module 'Dependencies'` が同一モジュール内の型に対して頻繁に出る。**真実は xcodebuild の結果だけ**。
 
+**逆に「通常ビルドとテストは通るのに Preview だけ壊れる」書き方がある。** Preview は `__designTimeSelection` を挟むコード変換を行うので、そこで曖昧さが出ると Preview のビルドだけが失敗する。**`xcodebuild test` が green でも気づけない**ので、View を触ったら Preview を描画して確認する。
+
+| 壊れる書き方 | 直し方 |
+|---|---|
+| `case let .loaded(.scanned(access, inventory))` | associated value のラベルを省略しない |
+| `Button("ラベル", action: メソッド名)` | `Button("ラベル") { メソッド名() }` とクロージャで包む |
+
 **ユニットテストはホストアプリのプロセスで動く。** `TEST_HOST` が指定されているので、テスト実行時にアプリが普通に起動し、`WindowGroup` の中身が組まれ、View の `.task` が発火する。そこで依存を触るとテスト文脈なので `testValue`（Unimplemented）を踏み、**テストが1件も走る前にプロセスごと死ぬ**。対策として `PhotoDockApp` はユニットテスト時に画面を組まない（`NSClassFromString("XCTestCase")` で判定）。UI テストは別プロセスから起動するので該当しない。
 
 **ディレクトリ名が規約のアンカーになっている。** `.swiftlint.yml` と `arch-check.sh` はパスの正規表現・実パスでルールを引くので、名前が1文字違うと**エラーではなく沈黙で検査が消える**。`Core/Services`・`Core/Policy`・`Features/`・`App/DI` は実際にこの綴りでないと引っかからない（`UseCases?` だけは単複どちらでも通るようにしてある）。加えて macOS は大文字小文字を区別しないので、`APP/DI` のような誤りは**ローカルでは通り Linux の CI だけ落ちる**（git のインデックス側の case も `git rm --cached -f` で直す必要がある）。
