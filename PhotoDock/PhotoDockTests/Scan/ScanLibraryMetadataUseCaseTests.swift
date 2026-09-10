@@ -31,14 +31,12 @@ struct ScanLibraryMetadataUseCaseTests {
 
     @Test("full なら集計して scanned を返す")
     func fullAccess() async {
-        let spy = SpyPhotoLibraryService(
-            access: .full,
-            assets: [
-                .stub(id: "1", coordinate: .anywhere),
-                .stub(id: "2", isScreenshot: true),
-                .stub(id: "3")
-            ]
-        )
+        let assets: [AssetMetadata] = [
+            .stub(id: "1", coordinate: .anywhere),
+            .stub(id: "2", isScreenshot: true),
+            .stub(id: "3")
+        ]
+        let spy = SpyPhotoLibraryService(access: .full, assets: assets)
 
         let outcome = await withDependencies {
             $0.photoLibrary = spy
@@ -49,9 +47,30 @@ struct ScanLibraryMetadataUseCaseTests {
 
         #expect(outcome == .scanned(
             access: .full,
-            inventory: LibraryInventory(total: 3, withLocation: 1, screenshots: 1)
+            inventory: LibraryInventory(total: 3, withLocation: 1, screenshots: 1),
+            assets: assets
         ))
         #expect(await spy.fetchCallCount == 1)
+    }
+
+    /// 集計だけ返して assets を捨てると、第2段が対象リストを取り直すことになる
+    @Test("集計だけでなく対象そのものも返す")
+    func keepsAssetsForSecondStage() async {
+        let assets: [AssetMetadata] = [.stub(id: "1"), .stub(id: "2")]
+        let spy = SpyPhotoLibraryService(access: .full, assets: assets)
+
+        let outcome = await withDependencies {
+            $0.photoLibrary = spy
+        } operation: {
+            let useCase = ScanLibraryMetadataUseCase()
+            return await useCase()
+        }
+
+        guard case let .scanned(_, _, returned) = outcome else {
+            Issue.record("scanned を期待した")
+            return
+        }
+        #expect(returned.map(\.id) == ["1", "2"])
     }
 
     /// limited を弾かないのが方針（一部でも診断する）。
@@ -72,7 +91,8 @@ struct ScanLibraryMetadataUseCaseTests {
 
         #expect(outcome == .scanned(
             access: .limited,
-            inventory: LibraryInventory(total: 1, withLocation: 0, screenshots: 1)
+            inventory: LibraryInventory(total: 1, withLocation: 0, screenshots: 1),
+            assets: [.stub(id: "1", isScreenshot: true)]
         ))
     }
 
@@ -89,7 +109,8 @@ struct ScanLibraryMetadataUseCaseTests {
 
         #expect(outcome == .scanned(
             access: .full,
-            inventory: LibraryInventory(total: 0, withLocation: 0, screenshots: 0)
+            inventory: LibraryInventory(total: 0, withLocation: 0, screenshots: 0),
+            assets: []
         ))
     }
 }

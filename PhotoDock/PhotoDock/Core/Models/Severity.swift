@@ -22,3 +22,11 @@ struct Finding: Sendable, Equatable, Hashable {
     let region: Region
     let maskedText: String
 }
+
+extension [Finding] {
+    /// 写真1枚の重大度は、含まれる所見のうち最も高いもの。
+    /// 所見がなければ nil（Severity に「安全」のケースを持たせない設計に合わせる）
+    var highestSeverity: Severity? {
+        map(\.severity).max()
+    }
+}

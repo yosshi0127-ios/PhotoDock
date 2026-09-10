@@ -19,7 +19,7 @@ struct ScanLibraryMetadataUseCase: Sendable {
         switch access {
         case .full, .limited:
             let assets = await photoLibrary.fetchAllAssetMetadata()
-            return .scanned(access: access, inventory: policy.inventory(of: assets))
+            return .scanned(access: access, inventory: policy.inventory(of: assets), assets: assets)
             
         case .notDetermined, .denied, .restricted:
             return .unavailable(access)

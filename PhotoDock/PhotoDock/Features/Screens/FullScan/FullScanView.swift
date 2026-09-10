@@ -1,0 +1,86 @@
+//
+//  FullScanView.swift
+//  PhotoDock
+//
+
+import SwiftUI
+
+/// 全量スキャン（第2段）。開いた瞬間に走り出し、画面を離れると止まる。
+/// 対象は診断ホームが第1段の結果から渡す。
+struct FullScanView: View {
+    let assets: [AssetMetadata]
+    let quality: ScanQuality
+
+    @State private var state = FullScanState()
+
+    private var assetIDs: [String] { assets.map(\.id) }
+
+    var body: some View {
+        VStack(spacing: 32) {
+            content
+        }
+        .padding()
+        .navigationTitle("診断")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await state.start(assetIDs: assetIDs, quality: quality) }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state.phase {
+        case .idle:
+            ProgressView()
+
+        case let .scanning(summary):
+            progress(summary)
+            ScanCountsView(summary: summary)
+
+        case let .finished(summary):
+            result(summary)
+            ScanCountsView(summary: summary)
+            Button("もう一度診断", action: rescan)
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private func rescan() {
+        Task { await state.start(assetIDs: assetIDs, quality: quality) }
+    }
+
+    private func progress(_ summary: ScanSummary) -> some View {
+        // total が 0 でも割り算が壊れないように下限を 1 にする
+        ProgressView(value: Double(summary.completed), total: Double(max(1, state.total))) {
+            Text("写真を診断しています")
+        } currentValueLabel: {
+            Text("\(summary.completed.formatted()) / \(state.total.formatted()) 枚")
+                .monospacedDigit()
+        }
+    }
+
+    /// 検出は原理的に不完全なので、ゼロ件でも「安全です」とは言わない
+    @ViewBuilder
+    private func result(_ summary: ScanSummary) -> some View {
+        if summary.flaggedPhotos == 0 {
+            Label("見られたらまずい情報は見つかりませんでした", systemImage: "checkmark.circle")
+        } else {
+            Label("\(summary.flaggedPhotos.formatted()) 枚に所見があります", systemImage: "exclamationmark.circle")
+        }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        FullScanView(
+            assets: (0..<40).map {
+                AssetMetadata(
+                    id: "stub-\($0)",
+                    creationDate: nil,
+                    modificationDate: nil,
+                    coordinate: nil,
+                    isScreenshot: false
+                )
+            },
+            quality: .quick
+        )
+    }
+}
