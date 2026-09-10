@@ -39,6 +39,7 @@ struct FullScanView: View {
         case let .finished(summary):
             result(summary)
             ScanCountsView(summary: summary)
+            elapsed
 
             if !state.flagged.isEmpty {
                 NavigationLink("写真を確認する") {
@@ -51,6 +52,13 @@ struct FullScanView: View {
             // （ambiguous use of '__designTimeSelection'）。通常ビルドは通るので気づきにくい
             Button("もう一度診断") { rescan() }
                 .buttonStyle(.bordered)
+        }
+    }
+
+    private var elapsed: some View {
+        LabeledContent("所要時間") {
+            Text("\(state.elapsedSeconds.formatted(.number.precision(.fractionLength(1)))) 秒")
+                .monospacedDigit()
         }
     }
 

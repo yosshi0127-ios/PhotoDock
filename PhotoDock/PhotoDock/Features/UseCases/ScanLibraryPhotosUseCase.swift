@@ -9,11 +9,16 @@ struct ScanLibraryPhotosUseCase: Sendable {
     private let scanPhoto = ScanPhotoUseCase()
 
     /// 同時実行数を一定に保ちながら診断し、終わったものから流す。
-    /// concurrency を上げすぎても速くならない（Vision が内部で並列化するので競合する）。
+    ///
+    /// 既定が 2 なのは実測による（162枚・1170x2532・シミュレータ）:
+    /// 並列1で 44.5秒、2で 41.5秒、4で 41.4秒、**8 は数分経っても終わらない**。
+    /// Vision が内部で全コアを使うので外側の並列化はほぼ効かず、増やすと画像の
+    /// デコードと推論コンテキストが同時に載ってメモリで破綻する。
+    /// 実際の写真は 4032x3024 とさらに大きいので、実機ではより少ない数で危険域に入る。
     func callAsFunction(
         assetIDs: [String],
         quality: ScanQuality,
-        concurrency: Int = 4
+        concurrency: Int = 2
     ) -> AsyncStream<ScannedPhoto> {
         AsyncStream { continuation in
             let task = Task {
