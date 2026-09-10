@@ -12,7 +12,7 @@ struct VisionOCRService: OCRService {
     
     @concurrent
     func recognizeText(in data: Data, maxPixelSize: Int) async -> [RecognizedText] {
-        guard let cgImage = Self.decode(data, maxPixelSize: maxPixelSize) else { return [] }
+        guard let cgImage = VisionImageDecoder.decode(data, maxPixelSize: maxPixelSize) else { return [] }
 
         // 前段: 文字らしい矩形が1つも無ければ OCR を走らせない。
         // 大半の写真には文字が無く、OCR は「探して何も見つけない」だけで 270ms 使う。
@@ -36,20 +36,6 @@ struct VisionOCRService: OCRService {
         return (request.results ?? []).compactMap(Self.recognizedText(from:))
     }
     
-    /// 復号と縮小を同時に行う。EXIF の向きも適用するので、以降は回転後の画像として扱える。
-    /// internal なのはテストが前段（containsTextRectangles）に同じ手順で画像を渡すため
-    static func decode(_ data: Data, maxPixelSize: Int) -> CGImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-
-        let options = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            kCGImageSourceCreateThumbnailWithTransform: true
-        ] as CFDictionary
-
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options)
-    }
-
     /// 読まずに「文字らしい矩形があるか」だけを見る。
     /// 言語非依存なので、.fast のように日本語で困ることがない。
     /// 判定に失敗したら true（OCR に回す）。見逃す方向には倒さない

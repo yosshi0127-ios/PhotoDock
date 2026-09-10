@@ -37,3 +37,9 @@ struct UnimplementedOCRService: OCRService {
         fatalError("UnimplementedOCRService.recognizeText(in:maxPixelSize:) が呼ばれた（テストで上書きすること）")
     }
 }
+
+struct UnimplementedFaceDetectionService: FaceDetectionService {
+    func detectFaces(in data: Data, maxPixelSize: Int) async -> [DetectedFace] {
+        fatalError("UnimplementedFaceDetectionService.detectFaces(in:maxPixelSize:) が呼ばれた（テストで上書きすること）")
+    }
+}

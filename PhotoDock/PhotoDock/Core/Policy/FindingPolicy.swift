@@ -16,10 +16,11 @@ struct FindingPolicy: Sendable {
         self.rules = rules
     }
 
-    /// 1枚ぶんの認識結果を所見に変換する。
+    /// 1枚ぶんの認識結果と検出した顔を所見に変換する。
     /// 確度の低い行は誤読として捨て、1行につき最大1件の所見を作る。
-    func findings(in texts: [RecognizedText]) -> [Finding] {
-        let classified = texts
+    /// 顔は「写り込みらしい」ものだけを所見にする（撮りたかった人の顔は所見にしない）。
+    func findings(in texts: [RecognizedText], faces: [DetectedFace] = []) -> [Finding] {
+        let fromTexts = texts
             .filter { $0.confidence >= rules.minimumConfidence }
             .compactMap { recognized -> Finding? in
                 guard let match = classify(recognized.text) else { return nil }
@@ -32,7 +33,35 @@ struct FindingPolicy: Sendable {
                 )
             }
 
-        return escalated(classified)
+        let fromFaces = faces
+            .filter(isBystander)
+            .map { face in
+                Finding(
+                    kind: .bystanderFace,
+                    severity: .caution,   // 幾何の推定なので断定しない
+                    region: face.region,
+                    maskedText: "他の人かもしれません"
+                )
+            }
+
+        return escalated(fromTexts + fromFaces)
+    }
+
+    /// 小さく、かつ「端にある」か「横を向いている」顔を写り込みらしいとみなす。
+    /// 大きく中央で正面の顔は撮りたかった人。誰の顔かは分からないので幾何だけで判断する。
+    /// 誤りは両方向に出る（端の友人を拾う / 正面に割り込んだ他人を落とす）ので要注意どまり。
+    func isBystander(_ face: DetectedFace) -> Bool {
+        let region = face.region
+        let margin = rules.bystanderFaceEdgeMargin
+
+        let isSmall = region.width * region.height < rules.bystanderFaceMaxArea
+        let isAtEdge = region.x < margin
+            || region.y < margin
+            || region.x + region.width > 1 - margin
+            || region.y + region.height > 1 - margin
+        let isTurnedAway = face.yaw.map { abs($0) >= rules.bystanderFaceMinYaw } ?? false
+
+        return isSmall && (isAtEdge || isTurnedAway)
     }
 
     /// 複合判定（氏名 + 生年月日 + 住所が揃えば本人確認書類、など）の置き場。
@@ -153,6 +182,8 @@ struct FindingPolicy: Sendable {
             maskedDigits(text, keepingTrailing: 0)
         case .cardNumber, .identityDocumentNumber, .phoneNumber:
             maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        case .bystanderFace:
+            text   // 顔は文字を持たない。ここに来ることはないが網羅のために置く
         }
     }
 

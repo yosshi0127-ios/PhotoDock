@@ -275,6 +275,61 @@ struct FindingPolicyTests {
         )
     }
 
+    // MARK: - 顔の写り込み
+
+    private func face(x: Double, y: Double, width: Double, height: Double, yaw: Double? = nil) -> DetectedFace {
+        DetectedFace(region: Region(x: x, y: y, width: width, height: height), yaw: yaw)
+    }
+
+    /// セルフィーや家族写真が全部要注意になったら製品として死ぬ
+    @Test("大きく中央で正面の顔は所見にしない（撮りたかった人）")
+    func subjectFaceIsNotAFinding() {
+        let selfie = face(x: 0.3, y: 0.2, width: 0.4, height: 0.3, yaw: 0)
+
+        #expect(!sut.isBystander(selfie))
+        #expect(sut.findings(in: [], faces: [selfie]).isEmpty)
+    }
+
+    @Test("小さく端にある顔は写り込みとして要注意", arguments: [
+        (0.92, 0.40, 0.05, 0.06),   // 右端
+        (0.40, 0.02, 0.05, 0.06),   // 上端
+        (0.02, 0.50, 0.04, 0.05)    // 左端
+    ])
+    func smallEdgeFaceIsBystander(_ x: Double, _ y: Double, _ width: Double, _ height: Double) {
+        let findings = sut.findings(in: [], faces: [face(x: x, y: y, width: width, height: height)])
+
+        #expect(findings.map(\.kind) == [.bystanderFace])
+        #expect(findings.first?.severity == .caution)
+    }
+
+    /// 端でなくても、小さくて横を向いていれば写り込みらしい
+    @Test("小さく横を向いた顔は中央でも写り込み")
+    func smallTurnedFaceIsBystander() {
+        #expect(sut.isBystander(face(x: 0.45, y: 0.45, width: 0.05, height: 0.06, yaw: 0.9)))
+    }
+
+    /// yaw を 0 で埋めると「正面だから被写体」に倒れる。分からないなら向きの条件は使わない
+    @Test("向きが取れない小さい顔は、端でなければ所見にしない")
+    func unknownYawFallsBackToGeometry() {
+        #expect(!sut.isBystander(face(x: 0.45, y: 0.45, width: 0.05, height: 0.06, yaw: nil)))
+    }
+
+    /// 大きい顔は端にあっても横を向いていても撮りたかった人
+    @Test("大きい顔は端で横向きでも所見にしない")
+    func largeEdgeFaceIsSubject() {
+        #expect(!sut.isBystander(face(x: 0.0, y: 0.1, width: 0.35, height: 0.4, yaw: 0.9)))
+    }
+
+    @Test("文字と顔の所見は同じ配列にまとまる")
+    func textAndFaceFindingsCombine() {
+        let texts = [RecognizedText(text: "4111 1111 1111 1111", confidence: 1, region: .test)]
+        let faces = [face(x: 0.92, y: 0.4, width: 0.05, height: 0.06)]
+
+        let kinds = sut.findings(in: texts, faces: faces).map(\.kind)
+
+        #expect(kinds == [.cardNumber, .bystanderFace])
+    }
+
     // MARK: - findings（入口）
 
     @Test("確度が閾値未満の行は誤読として捨てる")
@@ -315,7 +370,10 @@ struct FindingPolicyTests {
                 municipalityMarkers: FindingRules.standard.municipalityMarkers,
                 credentialLabels: FindingRules.standard.credentialLabels,
                 cardNumberDigits: FindingRules.standard.cardNumberDigits,
-                maskedTrailingDigits: FindingRules.standard.maskedTrailingDigits
+                maskedTrailingDigits: FindingRules.standard.maskedTrailingDigits,
+                bystanderFaceMaxArea: FindingRules.standard.bystanderFaceMaxArea,
+                bystanderFaceEdgeMargin: FindingRules.standard.bystanderFaceEdgeMargin,
+                bystanderFaceMinYaw: FindingRules.standard.bystanderFaceMinYaw
             )
         )
         let texts = [RecognizedText(text: "090-1234-5678", confidence: 0.9, region: .test)]
@@ -336,7 +394,8 @@ struct FindingPolicyTests {
             .address: "渋谷区神南1-2-3"
         ]
 
-        for expected in FindingKind.allCases {
+        // bystanderFace は文字ではなく顔から来るので、この表には無い（顔のテストは別節）
+        for expected in FindingKind.allCases where expected != .bystanderFace {
             let sample = try? #require(samples[expected])
             #expect(sample.flatMap { kind(of: $0) } == expected)
         }

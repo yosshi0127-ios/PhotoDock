@@ -75,7 +75,7 @@ struct VisionOCRServiceTests {
     /// 「速いが見逃す」は製品として成り立たないので、文字入りが通ることを固定する
     @Test("文字のある画像は前段を通過して OCR に回る")
     func prefilterPassesImagesWithText() async throws {
-        let image = try #require(VisionOCRService.decode(try await cardImageData(), maxPixelSize: 1_024))
+        let image = try #require(VisionImageDecoder.decode(try await cardImageData(), maxPixelSize: 1_024))
 
         #expect(VisionOCRService.containsTextRectangles(in: image))
     }
@@ -87,7 +87,7 @@ struct VisionOCRServiceTests {
         guard case let .data(data) = await pixels.fetchImageData(for: "stub-1") else {
             throw TestError.fixtureUnavailable
         }
-        let image = try #require(VisionOCRService.decode(data, maxPixelSize: 1_024))
+        let image = try #require(VisionImageDecoder.decode(data, maxPixelSize: 1_024))
 
         #expect(!VisionOCRService.containsTextRectangles(in: image))
     }

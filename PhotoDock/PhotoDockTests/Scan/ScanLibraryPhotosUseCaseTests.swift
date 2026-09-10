@@ -22,6 +22,7 @@ struct ScanLibraryPhotosUseCaseTests {
         await withDependencies {
             $0.pixelSource = pixels
             $0.ocr = ocr
+            $0.faceDetection = SpyFaceDetectionService()
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = ScanLibraryPhotosUseCase()
@@ -97,6 +98,7 @@ struct ScanLibraryPhotosUseCaseTests {
         await withDependencies {
             $0.pixelSource = probe
             $0.ocr = SpyOCRService()
+            $0.faceDetection = SpyFaceDetectionService()
         } operation: {
             let useCase = ScanLibraryPhotosUseCase()
 

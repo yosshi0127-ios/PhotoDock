@@ -29,6 +29,16 @@ struct FindingRules: Sendable {
     /// マスクで末尾に残す桁数
     let maskedTrailingDigits: Int
 
+    // 写り込みらしい顔の判定。**値は仮置き**で、実機のカメラロールで何枚引っかかるかを見て調整する。
+    // 誰の顔かは分からないので、「小さく・端で・横向き」という幾何だけで推定する
+
+    /// 面積比（幅 × 高さ、0...1）がこれ未満なら「小さい」。セルフィーは 10% 前後、集合写真の1人は 1% 前後
+    let bystanderFaceMaxArea: Double
+    /// 画像の縁からこの距離以内に触れていれば「端」
+    let bystanderFaceEdgeMargin: Double
+    /// |yaw|（ラジアン）がこれ以上なら「横を向いている」。yaw が取れなければこの条件は使わない
+    let bystanderFaceMinYaw: Double
+
     static let standard = FindingRules(
         minimumConfidence: 0.5,
         municipalityMarkers: ["市", "区", "町", "村"],
@@ -48,6 +58,9 @@ struct FindingRules: Sendable {
             CredentialLabel("Private Key")
         ],
         cardNumberDigits: 13...19,
-        maskedTrailingDigits: 4
+        maskedTrailingDigits: 4,
+        bystanderFaceMaxArea: 0.02,
+        bystanderFaceEdgeMargin: 0.10,
+        bystanderFaceMinYaw: 0.6
     )
 }

@@ -50,6 +50,7 @@ extension FindingKind {
         case .email: "メールアドレス"
         case .postalCode: "郵便番号"
         case .address: "住所"
+        case .bystanderFace: "顔の写り込み"
         }
     }
 }

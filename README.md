@@ -202,19 +202,21 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 ## 現在の実装状況
 
-**第1段スキャン（メタデータ全件列挙）は画面まで完成。第2段（1枚の診断）は UseCase まで完成、画面はこれから。**
+**ホーム → 全量スキャン（進捗） → 所見のある写真グリッド → 写真詳細（枠 + 所見リスト）まで一本の線で繋がっている。** 結果はまだ永続化していない（アプリを閉じると消える）。
 
-依存は3本、いずれも3点セット + live スモークで担保:
+依存は4本、いずれも3点セット + live スモークで担保:
 
 | 依存 | 役割 | 段 |
 |---|---|---|
 | `photoLibrary` | メタデータ全件列挙 + 権限 | 第1段 |
-| `pixelSource` | 画像バイト列（iCloud 判定込み） | 第2段 |
-| `ocr` | 文字認識（座標変換込み） | 第2段 |
+| `pixelSource` | 画像バイト列（iCloud 判定込み）+ 一覧用サムネイル | 第2段 |
+| `ocr` | 文字認識（座標変換込み）。前段に文字矩形の検出を置き、文字のない写真では OCR を省く | 第2段 |
+| `faceDetection` | 顔の位置と向き（写り込み判定の入力）。**シミュレータでは検出ゼロで続行** | 第2段 |
 
-- Policy 2本: `LibraryInventoryPolicy`（集計）/ `FindingPolicy`（分類・severity・マスク）
-- UseCase 3本: `ScanLibraryMetadataUseCase`（第1段）/ `ScanImageUseCase`（画像データ1枚 → 所見）/ `ScanPhotoUseCase`（ライブラリの1枚 → 所見。中身は `ScanImageUseCase` に委譲）
-- 診断ホームの State / View（第1段の結果）。実機で権限ダイアログの文言と実データの集計、ダーク/ライト両モードを確認済み
-- ユニットテスト53件。座標変換は合成画像を本物の Vision に通して固定してある
+- Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanSummaryPolicy`（第2段の逐次集計）
+- UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す）/ `LoadThumbnailUseCase`
+- 画面4つ: 診断ホーム / 全量スキャン / 所見のある写真グリッド / 写真詳細（PhotosPicker と一覧の2入口）
+- ユニットテスト93件。座標変換は合成画像を本物の Vision に通して固定してある
+- 実測（シミュレータ・162枚）: 並列化は効かない（1→2 で 7%、8 で破綻）。OCR の前段で 3.1 倍速。詳細は brief
 
-**残り: 1枚チェックの画面 / 所見インデックスの永続化 / 全量スキャン（N 並列・進捗）。** brief の Phase 1 の本体。
+**残り: 所見インデックスの永続化（中断・再開の土台）/ プリセット選択の UI / Foundation Models による credential の意味判定（iOS 26・実機のみ）。** 写り込み顔の閾値は仮置きで、実機のカメラロールで調整する。

@@ -22,9 +22,14 @@ struct ScanImageUseCaseTests {
         RecognizedText(text: "こんにちは", confidence: 1, region: .test)
     ]
 
-    private func scan(ocr: SpyOCRService, quality: ScanQuality = .precise) async -> [Finding] {
+    private func scan(
+        ocr: SpyOCRService,
+        faces: SpyFaceDetectionService = SpyFaceDetectionService(),
+        quality: ScanQuality = .precise
+    ) async -> [Finding] {
         await withDependencies {
             $0.ocr = ocr
+            $0.faceDetection = faces
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = ScanImageUseCase()
@@ -74,11 +79,25 @@ struct ScanImageUseCaseTests {
         let viaLibrary = await withDependencies {
             $0.pixelSource = SpyPixelSourceService(outcome: .data(anyImageData))
             $0.ocr = SpyOCRService(texts: cardAndGreeting)
+            $0.faceDetection = SpyFaceDetectionService()
         } operation: {
             let useCase = ScanPhotoUseCase()
             return await useCase(assetID: "stub-0", quality: .precise)
         }
 
         #expect(viaLibrary == .scanned(direct))
+    }
+
+    /// 顔検出も OCR と同じ縮小率で走らせる。ずれると詳細画面で顔枠と文字枠の座標系が合わない
+    @Test("顔検出にも同じ maxPixelSize が渡り、写り込みらしい顔が所見になる")
+    func facesFlowIntoFindings() async {
+        let faces = SpyFaceDetectionService(faces: [
+            DetectedFace(region: Region(x: 0.9, y: 0.05, width: 0.05, height: 0.06), yaw: nil)
+        ])
+
+        let findings = await scan(ocr: SpyOCRService(texts: []), faces: faces, quality: .quick)
+
+        #expect(findings.map(\.kind) == [.bystanderFace])
+        #expect(await faces.receivedMaxPixelSizes == [ScanQuality.quick.maxPixelSize])
     }
 }

@@ -52,6 +52,6 @@ custom_rules:
     name: "Features から Infrastructure 具象を参照しない"
     included: ".*/Features/.*\\.swift"
     # 具象名リストは育てる運用（Infrastructure 実装を追加したらここにも足す）
-    regex: "URLSession|PhotoKitPhotoLibraryService"
+    regex: "URLSession|PhotoKitPhotoLibraryService|PhotoKitPixelSourceService|VisionOCRService|VisionFaceDetectionService|VisionImageDecoder"
     message: "Features が依存してよいのは Core の protocol だけ（DIP）"
     severity: error
