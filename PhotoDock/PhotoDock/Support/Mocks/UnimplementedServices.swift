@@ -43,3 +43,17 @@ struct UnimplementedFaceDetectionService: FaceDetectionService {
         fatalError("UnimplementedFaceDetectionService.detectFaces(in:maxPixelSize:) が呼ばれた（テストで上書きすること）")
     }
 }
+
+struct UnimplementedScanRecordRepository: ScanRecordRepository {
+    func allRecords() async throws -> [ScanRecord] {
+        fatalError("UnimplementedScanRecordRepository.allRecords() が呼ばれた（テストで上書きすること）")
+    }
+
+    func save(_ record: ScanRecord) async throws {
+        fatalError("UnimplementedScanRecordRepository.save(_:) が呼ばれた（テストで上書きすること）")
+    }
+
+    func deleteAll() async throws {
+        fatalError("UnimplementedScanRecordRepository.deleteAll() が呼ばれた（テストで上書きすること）")
+    }
+}

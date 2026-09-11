@@ -5,7 +5,8 @@
 //  Created by akito.yoshikawa on 2026/09/08.
 //
 
-enum FindingKind: Sendable, Equatable, Hashable, CaseIterable {
+// String の raw value は保存形式のため（"cardNumber" と残るほうが1年後に読める）
+enum FindingKind: String, Sendable, Equatable, Hashable, CaseIterable, Codable {
     /// カード番号（Luhn チェックが通ったもの）
     case cardNumber
     /// マイナンバー・免許証番号（チェックデジットあり）・パスポート番号（書式のみ）

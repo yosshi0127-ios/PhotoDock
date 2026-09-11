@@ -8,9 +8,23 @@
 /// 所見の重大度。
 /// 「所見が無い」は `[Finding]` が空であることで表すので、safe や none のケースは持たない。
 /// 宣言順が大小になる（caution < danger）。写真グリッドのバッジは `max()` で決める。
-enum Severity: Sendable, Equatable, Hashable, Comparable {
+// String の raw value は保存形式のため（"danger" と残るほうが1年後に読める）。
+// raw value を持つ enum には Comparable が合成されないので、順序は明示する
+enum Severity: String, Sendable, Equatable, Hashable, Comparable, Codable {
     case caution
     case danger
+
+    /// 段階の高さ。case を足したらここも書く（switch が網羅なのでコンパイルエラーで気づく）
+    private var rank: Int {
+        switch self {
+        case .caution: 0
+        case .danger: 1
+        }
+    }
+
+    static func < (lhs: Severity, rhs: Severity) -> Bool {
+        lhs.rank < rhs.rank
+    }
 }
 
 /// 1件の所見（メモリ上のスキャン結果）。
