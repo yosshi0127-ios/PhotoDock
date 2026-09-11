@@ -8,8 +8,11 @@
 struct ScanSummary: Sendable, Equatable {
     /// 診断できた枚数（所見ゼロも含む）
     var scanned: Int
-    /// iCloud にしかなくて取れなかった枚数
+    /// 端末に無く、ダウンロードは許可されていなかった枚数（トグルをオンにすれば減る）
     var notAvailableLocally: Int
+    /// ダウンロードを試したが iCloud 側にも実体が無かった枚数（誰にもどうしようもない）。
+    /// 既定値を持つのは、この項目を後から足したため（memberwise init の既存呼び出しを壊さない）
+    var unavailableInCloud: Int = 0
     /// 写真が見つからなかった枚数
     var missing: Int
     /// 危険な所見を含む写真の枚数
@@ -26,7 +29,7 @@ struct ScanSummary: Sendable, Equatable {
     )
 
     /// 処理が終わった枚数。進捗の分子になる
-    var completed: Int { scanned + notAvailableLocally + missing }
+    var completed: Int { scanned + notAvailableLocally + unavailableInCloud + missing }
 
     /// 所見が1件でもあった写真の枚数
     var flaggedPhotos: Int { dangerPhotos + cautionPhotos }

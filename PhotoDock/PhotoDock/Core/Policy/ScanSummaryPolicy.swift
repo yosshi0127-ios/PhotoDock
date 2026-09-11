@@ -24,6 +24,9 @@ struct ScanSummaryPolicy: Sendable {
         case .notAvailableLocally:
             next.notAvailableLocally += 1
 
+        case .unavailableInCloud:
+            next.unavailableInCloud += 1
+
         case .missing:
             next.missing += 1
         }

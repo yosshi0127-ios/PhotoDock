@@ -31,6 +31,21 @@ struct ScanCountsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            // ダウンロードを試しても iCloud 側に実体が無かった写真。ユーザーにできることは無いので
+            // 「未診断」と混ぜず、原因が分かる名前で出す
+            if summary.unavailableInCloud > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("iCloud から取り出せない") {
+                        Text(summary.unavailableInCloud.formatted())
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("iCloud 上にデータが見つからない写真です。写真アプリでも開けないことがあります。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

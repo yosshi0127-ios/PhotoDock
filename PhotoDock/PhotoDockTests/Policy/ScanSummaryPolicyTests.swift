@@ -68,6 +68,7 @@ struct ScanSummaryPolicyTests {
     /// 診断できなかったものを「安全」に混ぜない
     @Test("取得できなかった写真は scanned に数えない", arguments: [
         ScanRecord.Outcome.notAvailableLocally,
+        ScanRecord.Outcome.unavailableInCloud,
         ScanRecord.Outcome.missing
     ])
     func unavailablePhotoIsNotScanned(_ outcome: ScanRecord.Outcome) {

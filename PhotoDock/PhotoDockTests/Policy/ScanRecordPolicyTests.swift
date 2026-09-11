@@ -72,6 +72,7 @@ struct ScanRecordPolicyTests {
     /// 前回 iCloud 上にあった写真が今回は端末に来ているかもしれない。取得の失敗は一瞬なので毎回試す
     @Test("取れなかった記録は毎回再挑戦する", arguments: [
         ScanRecord.Outcome.notAvailableLocally,
+        ScanRecord.Outcome.unavailableInCloud,
         ScanRecord.Outcome.missing
     ])
     func unavailableOutcomeIsRetried(_ outcome: ScanRecord.Outcome) {

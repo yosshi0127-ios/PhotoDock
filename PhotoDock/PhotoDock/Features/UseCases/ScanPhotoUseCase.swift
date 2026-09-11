@@ -16,6 +16,7 @@ struct ScanPhotoUseCase: Sendable {
     func callAsFunction(assetID: String, quality: ScanQuality, mode: PixelFetchMode) async -> PhotoScanOutcome {
         switch await pixelSource.fetchImageData(for: assetID, mode: mode) {
         case .notAvailableLocally: .notAvailableLocally
+        case .unavailableInCloud: .unavailableInCloud
         case .missing: .missing
         case let .data(data): .scanned(await scanImage(imageData: data, quality: quality))
         }

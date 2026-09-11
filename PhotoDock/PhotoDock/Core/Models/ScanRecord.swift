@@ -12,7 +12,10 @@ struct ScanRecord: Sendable, Equatable, Codable {
 
     enum Outcome: Sendable, Equatable, Codable {
         case scanned([StoredFinding])
+        /// 端末に無く、ダウンロードは許可されていなかった
         case notAvailableLocally
+        /// ダウンロードを試したが iCloud 側にも実体が無かった
+        case unavailableInCloud
         case missing
     }
 
@@ -46,6 +49,7 @@ extension ScanRecord {
         self.outcome = switch photo.outcome {
         case let .scanned(findings): .scanned(findings.map(StoredFinding.init))
         case .notAvailableLocally: .notAvailableLocally
+        case .unavailableInCloud: .unavailableInCloud
         case .missing: .missing
         }
     }
