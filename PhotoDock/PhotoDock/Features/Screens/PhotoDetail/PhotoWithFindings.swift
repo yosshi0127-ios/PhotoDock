@@ -10,7 +10,7 @@ import SwiftUI
 /// overlay した枠の座標がレターボックスの余白に影響されない。この2つは外せない。
 struct PhotoWithFindings: View {
     let image: UIImage
-    let findings: [Finding]
+    let findings: [StoredFinding]
 
     var body: some View {
         Image(uiImage: image)

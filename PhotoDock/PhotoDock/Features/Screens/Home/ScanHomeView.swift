@@ -38,10 +38,10 @@ struct ScanHomeView: View {
                         systemImage: "photo.on.rectangle.angled"
                     )
                 } else {
-                    // 枚数はボタンに載せる。押した先で何枚処理されるかが分かる
-                    // 品質のプリセット選択はこれから。全量なので既定はクイック
+                    // 枚数はボタンに載せる。押した先で何枚処理されるかが分かる。
+                    // 品質は精密のみ（実機でクイックの 1.63 倍で済み、一覧と詳細の食い違いが構造的に消える）
                     NavigationLink("\(inventory.total.formatted())枚を診断") {
-                        FullScanView(assets: assets, quality: .quick)
+                        FullScanView(assets: assets, quality: .precise)
                     }
                     .buttonStyle(.borderedProminent)
                 }

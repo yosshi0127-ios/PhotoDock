@@ -9,7 +9,7 @@ import SwiftUI
 /// Region は左上原点・0...1 正規化なので、Canvas がくれる size を掛けるだけで座標になる。
 /// 前提: 重ねる相手の Image に .scaledToFit() が付いていること（枠 = 写真の実描画矩形）
 struct FindingOverlay: View {
-    let findings: [Finding]
+    let findings: [StoredFinding]
 
     var body: some View {
         Canvas { context, size in
@@ -39,17 +39,15 @@ struct FindingOverlay: View {
         .frame(width: 300, height: 400)
         .overlay {
             FindingOverlay(findings: [
-                Finding(
+                StoredFinding(
                     kind: .cardNumber,
                     severity: .danger,
-                    region: Region(x: 0.1, y: 0.2, width: 0.6, height: 0.08),
-                    maskedText: "•••• •••• •••• 1234"
+                    region: Region(x: 0.1, y: 0.2, width: 0.6, height: 0.08)
                 ),
-                Finding(
+                StoredFinding(
                     kind: .address,
                     severity: .caution,
-                    region: Region(x: 0.05, y: 0.5, width: 0.8, height: 0.06),
-                    maskedText: "東京都◯◯区◯◯ ◯-◯"
+                    region: Region(x: 0.05, y: 0.5, width: 0.8, height: 0.06)
                 )
             ])
         }

@@ -97,7 +97,7 @@ struct FullScanView: View {
                     isScreenshot: false
                 )
             },
-            quality: .quick
+            quality: .precise
         )
     }
 }

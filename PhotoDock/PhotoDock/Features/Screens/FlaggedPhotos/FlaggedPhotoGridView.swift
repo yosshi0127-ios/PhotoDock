@@ -19,7 +19,7 @@ struct FlaggedPhotoGridView: View {
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(records, id: \.assetID) { record in
                     NavigationLink {
-                        PhotoDetailView(assetID: record.assetID)
+                        PhotoDetailView(record: record)
                     } label: {
                         FlaggedPhotoCell(record: record)
                     }
