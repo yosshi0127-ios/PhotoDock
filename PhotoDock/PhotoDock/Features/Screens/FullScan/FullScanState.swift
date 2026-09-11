@@ -20,7 +20,7 @@ final class FullScanState {
     private(set) var total = 0
 
     /// 所見があった写真の記録だけを溜める。3万枚でも該当は多くて数千件なのでメモリに乗る。
-    /// 記録から復元した分（前回の結果）と、今回診断した分が同じ形で並ぶ
+    /// 記録から復元した分（前回の結果）と、今回診断した分が同じ形で並ぶ。**新しいものが先頭**
     private(set) var flagged: [ScanRecord] = []
 
     /// 開始からの経過秒。スキャン中も伸びる
@@ -54,7 +54,8 @@ final class FullScanState {
 
         for await record in scanLibraryPhotos(assets: assets, quality: quality, allowsDownload: allowsDownload) {
             summary = policy.adding(record, to: summary)
-            if record.isFlagged { flagged.append(record) }
+            // 新しいものを先頭に。固定した進捗の直下に現れるので、診断中に目で追える
+            if record.isFlagged { flagged.insert(record, at: 0) }
             elapsedSeconds = Self.seconds(since: start)
             phase = .scanning(summary)
         }
