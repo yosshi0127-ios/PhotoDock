@@ -2,8 +2,6 @@
 //  FullScanState.swift
 //  PhotoDock
 //
-//  Created by akito.yoshikawa on 2026/09/10.
-//
 
 import Observation
 
@@ -11,19 +9,19 @@ import Observation
 @MainActor
 @Observable
 final class FullScanState {
-    
+
     enum Phase: Equatable {
         case idle
         case scanning(ScanSummary)
         case finished(ScanSummary)
     }
-    
+
     private(set) var phase: Phase = .idle
     private(set) var total = 0
 
-    /// 所見があった写真だけを溜める。3万枚でも該当は多くて数千件なのでメモリに乗る。
-    /// アプリを閉じると消える（永続化は所見インデックスの実装で入れる）
-    private(set) var flagged: [ScannedPhoto] = []
+    /// 所見があった写真の記録だけを溜める。3万枚でも該当は多くて数千件なのでメモリに乗る。
+    /// 記録から復元した分（前回の結果）と、今回診断した分が同じ形で並ぶ
+    private(set) var flagged: [ScanRecord] = []
 
     /// 開始からの経過秒。スキャン中も伸びる
     private(set) var elapsedSeconds: Double = 0
@@ -34,19 +32,19 @@ final class FullScanState {
     /// 画面に入ったときの自動開始。一度走らせていれば何もしない。
     /// .task は画面に戻るたびに走るので、これを分けないと
     /// 一覧から戻ってくるたびに診断が始まってしまう
-    func startIfNeeded(assetIDs: [String], quality: ScanQuality) async {
+    func startIfNeeded(assets: [AssetMetadata], quality: ScanQuality) async {
         guard case .idle = phase else { return }
-        await run(assetIDs: assetIDs, quality: quality)
+        await run(assets: assets, quality: quality)
     }
 
     /// 明示的な再診断。半年に一度回すアプリなので、走り直しは普通の操作
-    func restart(assetIDs: [String], quality: ScanQuality) async {
+    func restart(assets: [AssetMetadata], quality: ScanQuality) async {
         if case .scanning = phase { return }
-        await run(assetIDs: assetIDs, quality: quality)
+        await run(assets: assets, quality: quality)
     }
 
-    private func run(assetIDs: [String], quality: ScanQuality) async {
-        total = assetIDs.count
+    private func run(assets: [AssetMetadata], quality: ScanQuality) async {
+        total = assets.count
         flagged = []   // 再診断で前回の結果を残さない
         elapsedSeconds = 0
         var summary = ScanSummary.empty
@@ -54,9 +52,9 @@ final class FullScanState {
 
         let start = ContinuousClock.now
 
-        for await photo in scanLibraryPhotos(assetIDs: assetIDs, quality: quality) {
-            summary = policy.adding(photo, to: summary)
-            if photo.isFlagged { flagged.append(photo) }
+        for await record in scanLibraryPhotos(assets: assets, quality: quality) {
+            summary = policy.adding(record, to: summary)
+            if record.isFlagged { flagged.append(record) }
             elapsedSeconds = Self.seconds(since: start)
             phase = .scanning(summary)
         }

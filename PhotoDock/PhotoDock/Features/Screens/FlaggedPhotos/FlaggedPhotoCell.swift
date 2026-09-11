@@ -7,7 +7,7 @@ import SwiftUI
 
 /// 所見のあった写真1枚。サムネイルと、最も高い重大度のバッジを出す。
 struct FlaggedPhotoCell: View {
-    let photo: ScannedPhoto
+    let record: ScanRecord
 
     @State private var state = ThumbnailState()
 
@@ -25,7 +25,7 @@ struct FlaggedPhotoCell: View {
             // 白い写真だと隣のセルとの境が分からなくなる
             .overlay { RoundedRectangle(cornerRadius: 8).stroke(.separator, lineWidth: 0.5) }
             .overlay(alignment: .topTrailing) { badge }
-            .task { await state.load(assetID: photo.assetID, maxPixelSize: thumbnailPixels) }
+            .task { await state.load(assetID: record.assetID, maxPixelSize: thumbnailPixels) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)
     }
@@ -45,7 +45,7 @@ struct FlaggedPhotoCell: View {
 
     @ViewBuilder
     private var badge: some View {
-        if let severity = photo.findings.highestSeverity {
+        if let severity = record.findings.highestSeverity {
             Image(systemName: severity.icon)
                 .foregroundStyle(severity.tint)
                 .padding(6)
@@ -56,21 +56,24 @@ struct FlaggedPhotoCell: View {
 
     /// バッジは色と記号なので、読み上げでは種類と件数を言葉にする
     private var accessibilityLabel: String {
-        let severity = photo.findings.highestSeverity?.label ?? ""
-        return "\(severity)、所見\(photo.findings.count)件"
+        let severity = record.findings.highestSeverity?.label ?? ""
+        return "\(severity)、所見\(record.findings.count)件"
     }
 }
 
 #Preview {
     FlaggedPhotoCell(
-        photo: ScannedPhoto(
+        record: ScanRecord(
             assetID: "stub-0",
+            modificationDate: nil,
+            scannedAt: Date(timeIntervalSince1970: 1_757_000_000),
+            quality: .quick,
+            generation: "preview",
             outcome: .scanned([
-                Finding(
+                StoredFinding(
                     kind: .cardNumber,
                     severity: .danger,
-                    region: Region(x: 0, y: 0, width: 1, height: 1),
-                    maskedText: "**** **** **** 1111"
+                    region: Region(x: 0, y: 0, width: 1, height: 1)
                 )
             ])
         )

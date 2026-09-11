@@ -13,8 +13,6 @@ struct FullScanView: View {
 
     @State private var state = FullScanState()
 
-    private var assetIDs: [String] { assets.map(\.id) }
-
     var body: some View {
         VStack(spacing: 32) {
             content
@@ -23,7 +21,7 @@ struct FullScanView: View {
         .navigationTitle("診断")
         .navigationBarTitleDisplayMode(.inline)
         // .task は一覧から戻るたびに走るので、自動開始は State 側で一度きりに絞る
-        .task { await state.startIfNeeded(assetIDs: assetIDs, quality: quality) }
+        .task { await state.startIfNeeded(assets: assets, quality: quality) }
     }
 
     @ViewBuilder
@@ -43,7 +41,7 @@ struct FullScanView: View {
 
             if !state.flagged.isEmpty {
                 NavigationLink("写真を確認する") {
-                    FlaggedPhotoGridView(photos: state.flagged)
+                    FlaggedPhotoGridView(records: state.flagged)
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -63,7 +61,7 @@ struct FullScanView: View {
     }
 
     private func rescan() {
-        Task { await state.restart(assetIDs: assetIDs, quality: quality) }
+        Task { await state.restart(assets: assets, quality: quality) }
     }
 
     private func progress(_ summary: ScanSummary) -> some View {

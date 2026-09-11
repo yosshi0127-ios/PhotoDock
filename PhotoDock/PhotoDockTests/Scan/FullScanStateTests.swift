@@ -13,15 +13,18 @@ import Testing
 @Suite("FullScanState")
 struct FullScanStateTests {
     private let cardText = [RecognizedText(text: "4111 1111 1111 1111", confidence: 1, region: .test)]
+    private let twoAssets: [AssetMetadata] = [.stub(id: "1"), .stub(id: "2")]
 
     private func makeState(
         pixels: SpyPixelSourceService,
-        ocr: SpyOCRService = SpyOCRService()
+        ocr: SpyOCRService = SpyOCRService(),
+        records: SpyScanRecordRepository = SpyScanRecordRepository()
     ) -> FullScanState {
         withDependencies {
             $0.pixelSource = pixels
             $0.ocr = ocr
             $0.faceDetection = SpyFaceDetectionService()
+            $0.scanRecords = records
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             FullScanState()
@@ -38,8 +41,8 @@ struct FullScanStateTests {
         let pixels = makePixels()
         let state = makeState(pixels: pixels)
 
-        await state.startIfNeeded(assetIDs: ["1", "2"], quality: .quick)
-        await state.startIfNeeded(assetIDs: ["1", "2"], quality: .quick)
+        await state.startIfNeeded(assets: twoAssets, quality: .quick)
+        await state.startIfNeeded(assets: twoAssets, quality: .quick)
 
         #expect(await pixels.requestedIDs.count == 2)
     }
@@ -49,8 +52,8 @@ struct FullScanStateTests {
         let pixels = makePixels()
         let state = makeState(pixels: pixels)
 
-        await state.startIfNeeded(assetIDs: ["1", "2"], quality: .quick)
-        await state.restart(assetIDs: ["1", "2"], quality: .quick)
+        await state.startIfNeeded(assets: twoAssets, quality: .quick)
+        await state.restart(assets: twoAssets, quality: .quick)
 
         #expect(await pixels.requestedIDs.count == 4)
     }
@@ -59,9 +62,9 @@ struct FullScanStateTests {
     func collectsFlaggedPhotos() async {
         let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText))
 
-        await state.startIfNeeded(assetIDs: ["1", "2"], quality: .quick)
+        await state.startIfNeeded(assets: twoAssets, quality: .quick)
 
-        #expect(state.flagged.map(\.assetID) == ["1", "2"])
+        #expect(Set(state.flagged.map(\.assetID)) == ["1", "2"])
         #expect(state.phase == .finished(ScanSummary(
             scanned: 2, notAvailableLocally: 0, missing: 0, dangerPhotos: 2, cautionPhotos: 0
         )))
@@ -72,7 +75,7 @@ struct FullScanStateTests {
     func noFlaggedWhenClean() async {
         let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: []))
 
-        await state.startIfNeeded(assetIDs: ["1", "2"], quality: .quick)
+        await state.startIfNeeded(assets: twoAssets, quality: .quick)
 
         #expect(state.flagged.isEmpty)
     }
@@ -81,9 +84,29 @@ struct FullScanStateTests {
     func restartClearsFlagged() async {
         let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText))
 
-        await state.startIfNeeded(assetIDs: ["1", "2"], quality: .quick)
-        await state.restart(assetIDs: ["1", "2"], quality: .quick)
+        await state.startIfNeeded(assets: twoAssets, quality: .quick)
+        await state.restart(assets: twoAssets, quality: .quick)
 
         #expect(state.flagged.count == 2)
+    }
+
+    /// 前回の記録だけで画面が成立する = アプリを開き直しても結果が残っている
+    @Test("記録があれば診断せずに前回の結果が並ぶ")
+    func restoresFromRecords() async {
+        let pixels = makePixels()
+        let record = ScanRecord(
+            assetID: "1",
+            modificationDate: nil,
+            scannedAt: Date(timeIntervalSince1970: 1_750_000_000),
+            quality: .quick,
+            generation: ProcessInfo.processInfo.operatingSystemVersionString,
+            outcome: .scanned([StoredFinding(kind: .cardNumber, severity: .danger, region: .test)])
+        )
+        let state = makeState(pixels: pixels, records: SpyScanRecordRepository(records: [record]))
+
+        await state.startIfNeeded(assets: [.stub(id: "1")], quality: .quick)
+
+        #expect(state.flagged.map(\.assetID) == ["1"])
+        #expect(await pixels.requestedIDs.isEmpty)
     }
 }

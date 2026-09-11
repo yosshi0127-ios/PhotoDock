@@ -20,3 +20,10 @@ struct StoredFinding: Sendable, Equatable, Codable {
         self.init(kind: finding.kind, severity: finding.severity, region: finding.region)
     }
 }
+
+extension [StoredFinding] {
+    /// 写真1枚の重大度は、含まれる所見のうち最も高いもの（[Finding] と同じ規則）
+    var highestSeverity: Severity? {
+        map(\.severity).max()
+    }
+}

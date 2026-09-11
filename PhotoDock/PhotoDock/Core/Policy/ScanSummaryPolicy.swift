@@ -3,14 +3,14 @@
 //  PhotoDock
 //
 
-/// 全量スキャンの集計。1枚ずつ足していく純粋関数。
+/// 全量スキャンの集計。1件ずつ足していく純粋関数。
 /// 一括で配列を受け取らないのは、全量スキャンが数分〜数十分かかるため
-/// （終わるまで待つと進捗が出せない）。
+/// （終わるまで待つと進捗が出せない）。記録から復元した分も新しく診断した分も同じ形で足せる。
 struct ScanSummaryPolicy: Sendable {
-    func adding(_ photo: ScannedPhoto, to summary: ScanSummary) -> ScanSummary {
+    func adding(_ record: ScanRecord, to summary: ScanSummary) -> ScanSummary {
         var next = summary
 
-        switch photo.outcome {
+        switch record.outcome {
         case let .scanned(findings):
             next.scanned += 1
 
