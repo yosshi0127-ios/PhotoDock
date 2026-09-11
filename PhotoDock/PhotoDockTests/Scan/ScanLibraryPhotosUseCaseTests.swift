@@ -9,7 +9,8 @@ import Testing
 @testable import PhotoDock
 
 /// 全量スキャン（第2段）。診断の中身は 1枚経路のテストが持つので、
-/// ここでは「取りこぼさないこと」「並列数を守ること」「記録で診断を省くこと」を見る。
+/// ここでは「取りこぼさないこと」「並列数を守ること」「記録で診断を省くこと」
+/// 「ダウンロードの許可が正しく経路を通ること」を見る。
 @Suite("ScanLibraryPhotosUseCase")
 struct ScanLibraryPhotosUseCaseTests {
     private let generation = ProcessInfo.processInfo.operatingSystemVersionString
@@ -32,22 +33,28 @@ struct ScanLibraryPhotosUseCaseTests {
 
     private func scanAll(
         _ assets: [AssetMetadata],
+        quality: ScanQuality = .quick,
+        allowsDownload: Bool = false,
         concurrency: Int = 2,
         pixels: any PixelSourceService,
         ocr: SpyOCRService = SpyOCRService(),
-        records: SpyScanRecordRepository = SpyScanRecordRepository()
+        records: SpyScanRecordRepository = SpyScanRecordRepository(),
+        network: SpyNetworkStatusService = SpyNetworkStatusService(unmetered: false)
     ) async -> [ScanRecord] {
         await withDependencies {
             $0.pixelSource = pixels
             $0.ocr = ocr
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = records
+            $0.network = network
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = ScanLibraryPhotosUseCase()
 
             var scanned: [ScanRecord] = []
-            for await record in useCase(assets: assets, quality: .quick, concurrency: concurrency) {
+            for await record in useCase(
+                assets: assets, quality: quality, allowsDownload: allowsDownload, concurrency: concurrency
+            ) {
                 scanned.append(record)
             }
             return scanned
@@ -116,6 +123,7 @@ struct ScanLibraryPhotosUseCaseTests {
             $0.ocr = SpyOCRService()
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = SpyScanRecordRepository()
+            $0.network = SpyNetworkStatusService(unmetered: false)
         } operation: {
             let useCase = ScanLibraryPhotosUseCase()
 
@@ -159,17 +167,7 @@ struct ScanLibraryPhotosUseCaseTests {
         let pixels = SpyPixelSourceService(outcome: .data(Data("image".utf8)))
         let stale = targets.map { validRecord($0.id) }   // quick で診断済み
 
-        _ = await withDependencies {
-            $0.pixelSource = pixels
-            $0.ocr = SpyOCRService()
-            $0.faceDetection = SpyFaceDetectionService()
-            $0.scanRecords = SpyScanRecordRepository(records: stale)
-        } operation: {
-            let useCase = ScanLibraryPhotosUseCase()
-            var records: [ScanRecord] = []
-            for await record in useCase(assets: targets, quality: .precise) { records.append(record) }
-            return records
-        }
+        _ = await scanAll(targets, quality: .precise, pixels: pixels, records: SpyScanRecordRepository(records: stale))
 
         #expect(await pixels.requestedIDs.count == 2)
     }
@@ -218,5 +216,46 @@ struct ScanLibraryPhotosUseCaseTests {
 
         #expect(records.count == 3)
         #expect(await pixels.requestedIDs.count == 3)
+    }
+
+    // MARK: - iCloud のダウンロード
+
+    /// 既定はオフ。オフなら回線を見にも行かない（ユーザーの回線を勝手に使わない）
+    @Test("ダウンロード許可がオフなら端末のみで取り、回線も見ない")
+    func downloadDisabledStaysLocal() async {
+        let pixels = SpyPixelSourceService(outcome: .data(Data("image".utf8)))
+        let network = SpyNetworkStatusService(unmetered: true)
+
+        _ = await scanAll(assets(3), allowsDownload: false, pixels: pixels, network: network)
+
+        #expect(await pixels.requestedModes.allSatisfy { $0 == .localOnly })
+        #expect(await network.callCount == 0)
+    }
+
+    /// 縮小版は要求品質の解像度で取る（それ以上取っても OCR で縮めるだけ）
+    @Test("許可がオンで Wi-Fi なら、要求品質の解像度で縮小版を取る")
+    func downloadsOnUnmeteredNetwork() async {
+        let pixels = SpyPixelSourceService(outcome: .data(Data("image".utf8)))
+
+        _ = await scanAll(
+            assets(3), quality: .precise, allowsDownload: true,
+            pixels: pixels, network: SpyNetworkStatusService(unmetered: true)
+        )
+
+        let expected = PixelFetchMode.downloadIfNeeded(maxPixelSize: ScanQuality.precise.maxPixelSize)
+        #expect(await pixels.requestedModes.allSatisfy { $0 == expected })
+    }
+
+    /// 「Wi-Fi 接続時のみ」の担保。許可があってもモバイル回線では通信しない
+    @Test("許可がオンでも従量課金の回線なら端末のみ")
+    func staysLocalOnMeteredNetwork() async {
+        let pixels = SpyPixelSourceService(outcome: .data(Data("image".utf8)))
+        let network = SpyNetworkStatusService(unmetered: false)
+
+        _ = await scanAll(assets(3), allowsDownload: true, pixels: pixels, network: network)
+
+        #expect(await pixels.requestedModes.allSatisfy { $0 == .localOnly })
+        // 回線の判定はスキャン開始時に1回だけ
+        #expect(await network.callCount == 1)
     }
 }

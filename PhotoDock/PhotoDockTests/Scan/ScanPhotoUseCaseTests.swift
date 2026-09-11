@@ -27,7 +27,7 @@ struct ScanPhotoUseCaseTests {
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = ScanPhotoUseCase()
-            return await useCase(assetID: "stub-0", quality: quality)
+            return await useCase(assetID: "stub-0", quality: quality, mode: .localOnly)
         }
     }
 

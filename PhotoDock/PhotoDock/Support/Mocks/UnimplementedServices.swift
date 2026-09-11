@@ -23,8 +23,8 @@ struct UnimplementedPhotoLibraryService: PhotoLibraryService {
 }
 
 struct UnimplementedPixelSourceService: PixelSourceService {
-    func fetchImageData(for id: String) async -> PixelSourceOutcome {
-        fatalError("UnimplementedPixelSourceService.fetchImageData(for:) が呼ばれた（テストで上書きすること）")
+    func fetchImageData(for id: String, mode: PixelFetchMode) async -> PixelSourceOutcome {
+        fatalError("UnimplementedPixelSourceService.fetchImageData(for:mode:) が呼ばれた（テストで上書きすること）")
     }
 
     func fetchThumbnail(for id: String, maxPixelSize: Int) async -> Data? {
@@ -55,5 +55,11 @@ struct UnimplementedScanRecordRepository: ScanRecordRepository {
 
     func deleteAll() async throws {
         fatalError("UnimplementedScanRecordRepository.deleteAll() が呼ばれた（テストで上書きすること）")
+    }
+}
+
+struct UnimplementedNetworkStatusService: NetworkStatusService {
+    func isOnUnmeteredNetwork() async -> Bool {
+        fatalError("UnimplementedNetworkStatusService.isOnUnmeteredNetwork() が呼ばれた（テストで上書きすること）")
     }
 }

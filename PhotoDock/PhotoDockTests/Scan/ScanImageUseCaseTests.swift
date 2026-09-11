@@ -82,7 +82,7 @@ struct ScanImageUseCaseTests {
             $0.faceDetection = SpyFaceDetectionService()
         } operation: {
             let useCase = ScanPhotoUseCase()
-            return await useCase(assetID: "stub-0", quality: .precise)
+            return await useCase(assetID: "stub-0", quality: .precise, mode: .localOnly)
         }
 
         #expect(viaLibrary == .scanned(direct))

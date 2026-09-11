@@ -25,7 +25,7 @@ actor ConcurrencyProbePixelSourceService: PixelSourceService {
         self.stubbedOutcome = outcome
     }
 
-    func fetchImageData(for id: String) async -> PixelSourceOutcome {
+    func fetchImageData(for id: String, mode: PixelFetchMode) async -> PixelSourceOutcome {
         if Task.isCancelled { startedWhileCancelled += 1 }
 
         running += 1

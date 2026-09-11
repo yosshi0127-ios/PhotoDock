@@ -10,6 +10,8 @@ import SwiftUI
 struct FullScanView: View {
     let assets: [AssetMetadata]
     let quality: ScanQuality
+    /// 「iCloud の写真も診断する」の設定値。回線の判定は UseCase が行う
+    let allowsDownload: Bool
 
     @State private var state = FullScanState()
 
@@ -21,7 +23,7 @@ struct FullScanView: View {
         .navigationTitle("診断")
         .navigationBarTitleDisplayMode(.inline)
         // .task は一覧から戻るたびに走るので、自動開始は State 側で一度きりに絞る
-        .task { await state.startIfNeeded(assets: assets, quality: quality) }
+        .task { await state.startIfNeeded(assets: assets, quality: quality, allowsDownload: allowsDownload) }
     }
 
     @ViewBuilder
@@ -61,7 +63,7 @@ struct FullScanView: View {
     }
 
     private func rescan() {
-        Task { await state.restart(assets: assets, quality: quality) }
+        Task { await state.restart(assets: assets, quality: quality, allowsDownload: allowsDownload) }
     }
 
     private func progress(_ summary: ScanSummary) -> some View {
@@ -97,7 +99,8 @@ struct FullScanView: View {
                     isScreenshot: false
                 )
             },
-            quality: .precise
+            quality: .precise,
+            allowsDownload: false
         )
     }
 }

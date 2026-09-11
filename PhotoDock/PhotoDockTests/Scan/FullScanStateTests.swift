@@ -25,6 +25,7 @@ struct FullScanStateTests {
             $0.ocr = ocr
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = records
+            $0.network = SpyNetworkStatusService(unmetered: false)
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             FullScanState()

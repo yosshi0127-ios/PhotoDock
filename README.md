@@ -204,7 +204,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 **ホーム → 全量スキャン（進捗） → 所見のある写真グリッド → 写真詳細（枠 + 所見リスト）まで一本の線で繋がっている。** 結果はまだ永続化していない（アプリを閉じると消える）。
 
-依存は4本、いずれも3点セット + live スモークで担保:
+依存は6本、いずれも3点セット + live スモークで担保:
 
 | 依存 | 役割 | 段 |
 |---|---|---|
@@ -212,6 +212,8 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 | `pixelSource` | 画像バイト列（iCloud 判定込み）+ 一覧用サムネイル | 第2段 |
 | `ocr` | 文字認識（座標変換込み）。前段に文字矩形の検出を置き、文字のない写真では OCR を省く | 第2段 |
 | `faceDetection` | 顔の位置と向き（写り込み判定の入力）。**シミュレータでは検出ゼロで続行** | 第2段 |
+| `scanRecords` | スキャン済み記録の保存（SwiftData）。所見ゼロも記録し、2回目以降は新しい写真だけ診断する | 第2段 |
+| `network` | いま通信してよい回線か（Wi-Fi・低データモードでない）。iCloud の写真を取り寄せる前に1回だけ見る | 第2段 |
 
 - Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanSummaryPolicy`（第2段の逐次集計）
 - UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す）/ `LoadThumbnailUseCase`

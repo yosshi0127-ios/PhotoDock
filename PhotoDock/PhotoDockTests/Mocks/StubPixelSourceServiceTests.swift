@@ -18,16 +18,16 @@ struct StubPixelSourceServiceTests {
 
     @Test("同じ id は必ず同じバイト列を返す（Preview の表示が毎回変わらないため）")
     func isDeterministic() async {
-        let first = await sut.fetchImageData(for: "stub-0")
-        let second = await sut.fetchImageData(for: "stub-0")
+        let first = await sut.fetchImageData(for: "stub-0", mode: .localOnly)
+        let second = await sut.fetchImageData(for: "stub-0", mode: .localOnly)
 
         #expect(first == second)
     }
 
     @Test("50枚に1枚は iCloud にあって取れない")
     func notAvailableLocally() async {
-        #expect(await sut.fetchImageData(for: "stub-3") == .notAvailableLocally)
-        #expect(await sut.fetchImageData(for: "stub-53") == .notAvailableLocally)
+        #expect(await sut.fetchImageData(for: "stub-3", mode: .localOnly) == .notAvailableLocally)
+        #expect(await sut.fetchImageData(for: "stub-53", mode: .localOnly) == .notAvailableLocally)
     }
 
     @Test("20枚に1枚はカード番号が写っていて、本物の OCR で読める")
@@ -54,7 +54,7 @@ struct StubPixelSourceServiceTests {
 
     /// Stub が返した画像を本物の Vision に通し、読めた行を1つの文字列に連結して返す
     private func recognizedText(for id: String) async throws -> String {
-        guard case let .data(data) = await sut.fetchImageData(for: id),
+        guard case let .data(data) = await sut.fetchImageData(for: id, mode: .localOnly),
               let cgImage = UIImage(data: data)?.cgImage else {
             return ""
         }

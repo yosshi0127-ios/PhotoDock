@@ -18,7 +18,7 @@ struct VisionOCRServiceTests {
 
     /// カード番号が描かれた画像（stub-0）のバイト列
     private func cardImageData() async throws -> Data {
-        guard case let .data(data) = await pixels.fetchImageData(for: "stub-0") else {
+        guard case let .data(data) = await pixels.fetchImageData(for: "stub-0", mode: .localOnly) else {
             throw TestError.fixtureUnavailable
         }
         return data
@@ -84,7 +84,7 @@ struct VisionOCRServiceTests {
     @Test("文字のない画像は前段で止まる")
     func prefilterStopsImagesWithoutText() async throws {
         // stub-1 は StubPixelSourceService が文字なしで描く白地の画像
-        guard case let .data(data) = await pixels.fetchImageData(for: "stub-1") else {
+        guard case let .data(data) = await pixels.fetchImageData(for: "stub-1", mode: .localOnly) else {
             throw TestError.fixtureUnavailable
         }
         let image = try #require(VisionImageDecoder.decode(data, maxPixelSize: 1_024))

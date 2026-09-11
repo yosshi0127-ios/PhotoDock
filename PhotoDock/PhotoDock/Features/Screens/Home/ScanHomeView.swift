@@ -11,6 +11,10 @@ import SwiftUI
 struct ScanHomeView: View {
     @State private var state = ScanHomeState()
 
+    /// 「iCloud の写真も診断する」。既定オフ（ユーザーの回線を勝手に使わない）。
+    /// 表示の設定なので View が持つ（@AppStorage は @Observable の中では更新が伝わらない）
+    @AppStorage("allowsCloudDownload") private var allowsCloudDownload = false
+
     var body: some View {
         content
             .padding()
@@ -41,9 +45,17 @@ struct ScanHomeView: View {
                     // 枚数はボタンに載せる。押した先で何枚処理されるかが分かる。
                     // 品質は精密のみ（実機でクイックの 1.63 倍で済み、一覧と詳細の食い違いが構造的に消える）
                     NavigationLink("\(inventory.total.formatted())枚を診断") {
-                        FullScanView(assets: assets, quality: .precise)
+                        FullScanView(assets: assets, quality: .precise, allowsDownload: allowsCloudDownload)
                     }
                     .buttonStyle(.borderedProminent)
+
+                    // iCloud 最適化オンの端末では 80% が端末に無い（実測）。既定オフで、Wi-Fi のときだけ取る
+                    Toggle("iCloud の写真も診断する", isOn: $allowsCloudDownload)
+                        .font(.subheadline)
+                    Text("端末に無い写真を Wi-Fi 接続時に取り寄せます（1枚あたり約300KB）")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
 
                 if access == .limited {

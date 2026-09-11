@@ -9,7 +9,7 @@ import UIKit
 /// 返す内容は id から決定的に決まる（Preview の表示が毎回変わらないようにするため）。
 struct StubPixelSourceService: PixelSourceService {
     /// id の連番から、機微情報が写っている画像／何も写っていない画像／iCloud 上にある状態を出し分ける。
-    func fetchImageData(for id: String) async -> PixelSourceOutcome {
+    func fetchImageData(for id: String, mode: PixelFetchMode) async -> PixelSourceOutcome {
         let index = Self.index(of: id)
 
         // 50枚に1枚は「iCloud にあって診断できない」状態。その表示も Preview で確認できるように
@@ -22,7 +22,7 @@ struct StubPixelSourceService: PixelSourceService {
     /// Preview では縮小せず、診断と同じ合成画像をそのまま返す
     /// （一覧の見た目を確認するのが目的で、サイズは問題にならない）
     func fetchThumbnail(for id: String, maxPixelSize: Int) async -> Data? {
-        guard case let .data(data) = await fetchImageData(for: id) else { return nil }
+        guard case let .data(data) = await fetchImageData(for: id, mode: .localOnly) else { return nil }
         return data
     }
 

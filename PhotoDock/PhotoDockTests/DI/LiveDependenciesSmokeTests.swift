@@ -16,7 +16,7 @@ import Testing
 ///
 /// 静的な検査（liveValue の右辺が Stub/Noop/Unimplemented でないこと）は `scripts/arch-check.sh` が持つ。
 struct LiveDependenciesSmokeTests {
-    @Test("全 liveValue（5点）が解決でき、本番実装が入っている")
+    @Test("全 liveValue（6点）が解決でき、本番実装が入っている")
     func resolvesAllLiveValues() {
         var values = DependencyValues()
         values.context = .live
@@ -26,5 +26,6 @@ struct LiveDependenciesSmokeTests {
         #expect(values.ocr is VisionOCRService)
         #expect(values.faceDetection is VisionFaceDetectionService)
         #expect(values.scanRecords is SwiftDataScanRecordRepository)
+        #expect(values.network is NWPathMonitorNetworkStatusService)
     }
 }

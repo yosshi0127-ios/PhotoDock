@@ -32,18 +32,18 @@ final class FullScanState {
     /// 画面に入ったときの自動開始。一度走らせていれば何もしない。
     /// .task は画面に戻るたびに走るので、これを分けないと
     /// 一覧から戻ってくるたびに診断が始まってしまう
-    func startIfNeeded(assets: [AssetMetadata], quality: ScanQuality) async {
+    func startIfNeeded(assets: [AssetMetadata], quality: ScanQuality, allowsDownload: Bool = false) async {
         guard case .idle = phase else { return }
-        await run(assets: assets, quality: quality)
+        await run(assets: assets, quality: quality, allowsDownload: allowsDownload)
     }
 
     /// 明示的な再診断。半年に一度回すアプリなので、走り直しは普通の操作
-    func restart(assets: [AssetMetadata], quality: ScanQuality) async {
+    func restart(assets: [AssetMetadata], quality: ScanQuality, allowsDownload: Bool = false) async {
         if case .scanning = phase { return }
-        await run(assets: assets, quality: quality)
+        await run(assets: assets, quality: quality, allowsDownload: allowsDownload)
     }
 
-    private func run(assets: [AssetMetadata], quality: ScanQuality) async {
+    private func run(assets: [AssetMetadata], quality: ScanQuality, allowsDownload: Bool) async {
         total = assets.count
         flagged = []   // 再診断で前回の結果を残さない
         elapsedSeconds = 0
@@ -52,7 +52,7 @@ final class FullScanState {
 
         let start = ContinuousClock.now
 
-        for await record in scanLibraryPhotos(assets: assets, quality: quality) {
+        for await record in scanLibraryPhotos(assets: assets, quality: quality, allowsDownload: allowsDownload) {
             summary = policy.adding(record, to: summary)
             if record.isFlagged { flagged.append(record) }
             elapsedSeconds = Self.seconds(since: start)
