@@ -11,8 +11,10 @@ struct FlaggedPhotoCell: View {
 
     @State private var state = ThumbnailState()
 
-    /// Retina 分を見込んで論理サイズの2倍を要求する
-    private let thumbnailPixels = 240
+    /// 画面の倍率から決める。セル幅は adaptive(minimum: 100) で最大 190pt 前後になるので、
+    /// 固定の 240px だと 3× 端末（375〜570px 必要）でぼやける
+    @Environment(\.displayScale) private var displayScale
+    private var thumbnailPixels: Int { Int(200 * displayScale) }
 
     var body: some View {
         // 先に正方形の枠を作ってから中身を重ねる。

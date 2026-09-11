@@ -8,7 +8,7 @@ import Foundation
 /// スキャン済み記録。「この写真をこの条件で診断した」という事実。
 /// 所見ゼロの写真も記録する — 記録しないと「未スキャン」と区別できず、2回目以降が速くならない。
 /// インデックスはただのキャッシュで、真実は常に最新のスキャン（再診断で差分が出たら上書き）。
-struct ScanRecord: Sendable, Equatable, Codable {
+struct ScanRecord: Sendable, Equatable, Codable, Identifiable {
 
     enum Outcome: Sendable, Equatable, Codable {
         case scanned([StoredFinding])
@@ -20,6 +20,8 @@ struct ScanRecord: Sendable, Equatable, Codable {
     }
 
     let assetID: String
+    /// assetID は端末内で一意なのでそのまま id にする（SwiftUI の ForEach 用）
+    var id: String { assetID }
     /// 写真がこの後に編集されていたら記録は無効（再スキャン）
     let modificationDate: Date?
     let scannedAt: Date

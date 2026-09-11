@@ -63,3 +63,10 @@ struct ScanCountsView: View {
     ))
     .padding()
 }
+
+#Preview("iCloud から取り出せない写真がある") {
+    ScanCountsView(summary: ScanSummary(
+        scanned: 3_340, notAvailableLocally: 0, unavailableInCloud: 9, missing: 0, dangerPhotos: 5, cautionPhotos: 37
+    ))
+    .padding()
+}

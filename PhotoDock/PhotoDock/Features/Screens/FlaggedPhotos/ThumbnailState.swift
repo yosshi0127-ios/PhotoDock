@@ -23,6 +23,8 @@ final class ThumbnailState {
         guard let data = await loadThumbnail(assetID: assetID, maxPixelSize: maxPixelSize) else {
             return
         }
-        image = UIImage(data: data)
+        // 復号を先に済ませてから渡す。UIImage(data:) は復号を描画時まで遅らせるので、
+        // そのまま渡すとセルが画面に入った瞬間にメインで JPEG を復号してスクロールがカクつく
+        image = await UIImage(data: data)?.byPreparingForDisplay()
     }
 }
