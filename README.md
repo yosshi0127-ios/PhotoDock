@@ -136,12 +136,12 @@ let outcome = await withDependencies {
 
 ```bash
 xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 ```
 
-destination を iOS 18.4 に固定しているのは、deployment target が 18.0 なので**最低ラインで検証する**ため。Xcode の ⌘U はツールバーで選んだ実行先を使うので、コミット前は CLI で一度確認する。
+destination を iOS 26.2 に固定しているのは、deployment target が 26.0 で、手元にある最も低い iOS 26 ランタイムが 26.2 だから（**最低ラインで検証する**）。Xcode の ⌘U はツールバーで選んだ実行先を使うので、コミット前は CLI で一度確認する。
 
 規約の機械検査（CI でも同じものが走る）:
 
@@ -152,7 +152,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 - `.swiftlint.yml` の custom_rules … 層違反・注入点違反・Policy の純粋性（スタイルルールは無効）
 - `scripts/arch-check.sh` … DI 3値・1依存1ファイル・protocol の登録漏れ・liveValue が本番実装
 
-ビルド設定: iOS 18.0 / Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` / iPhone は縦向き固定。
+ビルド設定: iOS 26.0（2026-09-12 に 18.0 から引き上げ。理由は brief の「設計方針」）/ Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` / iPhone は縦向き固定。Info.plist は `PhotoDock/PhotoDock/Info.plist`（`BGTaskSchedulerPermittedIdentifiers` だけ。他のキーは `INFOPLIST_KEY_*` で生成し、ビルド時に合成される）。
 
 ## 踏んだ罠（同じ穴を掘らないために）
 
@@ -200,11 +200,23 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 **Foundation Models（オンデバイス LLM）もシミュレータで動かない。しかも `availability` は `.available` と嘘をつく。** 実際に `respond` すると safety モデル（`com.apple.fm.language.instruct_300m.safety`）が見つからず `GenerationError` になる。macOS 26.5 実機では動く。availability の確認だけでなく、呼び出しの失敗も握って続行する設計が要る。
 
+**フォルダ同期グループの中に Info.plist を置くと「Multiple commands produce Info.plist」で落ちる。** Xcode 16 以降の同期グループはフォルダ内の全ファイルをターゲットに入れるので、`INFOPLIST_FILE` に指定した plist が Copy Bundle Resources にも入って衝突する。Xcode が GUI で plist を作るときと同じく、pbxproj に `PBXFileSystemSynchronizedBuildFileExceptionSet`（`membershipExceptions = (Info.plist)`）を足して除外する。
+
+**View の `.task` は子画面を push しただけでキャンセルされる。** NavigationStack で詳細を開くと親の `onDisappear` が呼ばれ、`.task` も止まる。数十分かかる診断をここに乗せると、写真詳細を開いた瞬間に止まる。State が自前の `Task` を持ち、View は `onAppear` から同期で始めるだけにする。さらに、View がその Task の終わりを `await` すると State を掴み続けて画面を閉じても捨てられないので、開始は同期で返し、終わりを待ちたいテストは `waitUntilSettled()` を使う。
+
+**`@MainActor` クラスの `deinit` は nonisolated なので、隔離された stored property に触れない**（`scanTask?.cancel()` が「main actor-isolated property can not be referenced from a nonisolated context」）。`isolated deinit`（Swift 6.1 / iOS 18.4+）にすると触れる。あわせて、Task が `self` を強く持つと deinit が来ないので、ループ内の `self` は弱参照にする。
+
+**`BGTask` は Sendable でないので actor から actor へ渡せない**（「sending 'task' risks causing data races」）。OS の launch handler から受け取る1箇所だけ `nonisolated(unsafe) let` で送り、以後は1つの actor の中に閉じ込めて外とは ID だけをやり取りする。なお `BGContinuedProcessingTask` の launch handler 登録は「起動完了前に」の縛りから除外されている（SDK ヘッダに明記）ので、Infrastructure の中で最初の申告時に登録できる。
+
+**Vision の文字認識はバックグラウンドで GPU を使えず止まる。compute device の指定では回避できない。** 背景では `IOGPUMetalError: Insufficient Permission (to submit GPU work from background)` になる。`setComputeDevice(_:for:)` で Neural Engine / CPU を選んでも、前処理が Metal を使うので同じ。UIKit の背景猶予（約30秒）が切れた瞬間に詰まり、進捗ゼロが45秒続くと dasd が `marking stalled` → BGContinuedProcessingTask を打ち切る。理由はアプリ側のログに出ない — **Console.app で `dasd` プロセスを見る**。正解は entitlement「Background GPU Access」+ `requiredResources = .gpu` だが、**個人の開発チームでは provisioning が拒否される**（有料プログラムが必要）。いまは `.gpu` を要求して拒否されたら継続しない。
+
+**actor のメソッド内で作った普通のクロージャは「その actor に隔離」と推論される。OS のコールバックに渡すと実機で落ちる**（「Incorrect actor executor assumption; expected '...Service' executor」）。ObjC から来る `(BGTask) -> Void` や `expirationHandler: (() -> Void)?` は `@Sendable` が付いていないので、この推論が黙って働く。コンパイルは通り、OS が自分のキューから呼んだ瞬間に実行時チェックで落ちる。**OS に渡すクロージャには `@Sendable` を明示**し、actor に触るのは中で `Task { await self... }` を挟む。
+
 ## 現在の実装状況
 
-**ホーム → 全量スキャン（進捗） → 所見のある写真グリッド → 写真詳細（枠 + 所見リスト）まで一本の線で繋がっている。** 結果はまだ永続化していない（アプリを閉じると消える）。
+**ホーム → 全量スキャン（進捗） → 所見のある写真グリッド → 写真詳細（枠 + 所見リスト）まで一本の線で繋がっている。** 結果は SwiftData に記録され、2回目以降は新しい写真だけ診断する。写真詳細を開いている間も診断は続く。アプリを離れても続ける仕組み（`BGContinuedProcessingTask`）は入っているが、**背景で GPU を使う entitlement が個人チームでは付けられないため、いまは申告が拒否されて前面のみ**（有料プログラム加入後に自動で有効になる）。
 
-依存は6本、いずれも3点セット + live スモークで担保:
+依存は7本、いずれも3点セット + live スモークで担保:
 
 | 依存 | 役割 | 段 |
 |---|---|---|
@@ -214,12 +226,13 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 | `faceDetection` | 顔の位置と向き（写り込み判定の入力）。**シミュレータでは検出ゼロで続行** | 第2段 |
 | `scanRecords` | スキャン済み記録の保存（SwiftData）。所見ゼロも記録し、2回目以降は新しい写真だけ診断する | 第2段 |
 | `network` | いま通信してよい回線か（Wi-Fi・低データモードでない）。iCloud の写真を取り寄せる前に1回だけ見る | 第2段 |
+| `continuedProcessing` | 前面で始めた診断をアプリを離れても続けたいと OS に申告する（`BGContinuedProcessingTask`）。診断する写真があるときだけ申告し、1枚ごとに進捗を報告。背景の GPU（`.gpu`）を要求し、**拒否されたら nil を返して診断は前面だけで続く**（Vision が背景で GPU 無しでは止まるため） | 第2段 |
 
 - Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanSummaryPolicy`（第2段の逐次集計）
-- UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す）/ `LoadThumbnailUseCase`
+- UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す。診断する写真があれば OS に継続を申告し、1枚ごとに進捗を報告）/ `LoadThumbnailUseCase`
 - 画面4つ: 診断ホーム / 全量スキャン（**精密のみ**。実機でクイックの 1.63 倍で済むためプリセットは出さない） / 所見のある写真グリッド / 写真詳細（一覧からは**記録を表示するだけで再検査しない**。PhotosPicker の1枚だけ精密で診断）
 - 保存: `SwiftDataScanRecordRepository`。所見ゼロも「スキャン済み」として記録し、2回目以降は新しい写真の分だけ診断する。本文（マスク済み文字列）は保存しない
-- ユニットテスト93件。座標変換は合成画像を本物の Vision に通して固定してある
+- ユニットテスト119件。座標変換は合成画像を本物の Vision に通して固定してある
 - 実測（シミュレータ・162枚）: 並列化は効かない（1→2 で 7%、8 で破綻）。OCR の前段で 3.1 倍速。詳細は brief
 
-**残り: 所見インデックスの永続化（中断・再開の土台）/ プリセット選択の UI / Foundation Models による credential の意味判定（iOS 26・実機のみ）。** 写り込み顔の閾値は仮置きで、実機のカメラロールで調整する。
+**残り: OCR の失敗を outcome として区別する（失敗を「所見なし」として記録しない）/ 対処（削除・非表示）/ 経路チップ / Foundation Models による credential の意味判定（実機のみ）。** 写り込み顔の閾値は仮置きで、実機のカメラロールで調整する。バックグラウンド継続は有料プログラム加入後に entitlement「Background GPU Access」を付けて有効化する（`UIBackgroundModes` は不要だった）。

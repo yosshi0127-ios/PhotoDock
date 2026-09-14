@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- BGContinuedProcessingTask（全量スキャンの継続）の識別子。ワイルドカード形式が必須で、
+	     提出時は接頭辞 + 用途（例: com.upft.photodock.scan.full）。他のキーは Xcode が生成する -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.upft.photodock.scan.*</string>
+	</array>
+</dict>
+</plist>

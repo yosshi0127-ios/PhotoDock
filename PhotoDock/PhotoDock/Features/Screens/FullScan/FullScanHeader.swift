@@ -21,6 +21,10 @@ struct FullScanHeader: View {
                 progress(summary)
                 compactCounts(summary)
 
+            case let .interrupted(summary):
+                interrupted(summary)
+                compactCounts(summary)
+
             case let .finished(summary):
                 result(summary)
                 compactCounts(summary)
@@ -39,6 +43,14 @@ struct FullScanHeader: View {
             Text("\(summary.completed.formatted()) / \(total.formatted()) 枚")
                 .monospacedDigit()
         }
+    }
+
+    /// 止まった理由（OS の打ち切り・Live Activity からの中止）は画面では分からないので、残りがあることだけを言う
+    private func interrupted(_ summary: ScanSummary) -> some View {
+        Label(
+            "診断が途中で止まりました（残り \((total - summary.completed).formatted()) 枚）",
+            systemImage: "pause.circle"
+        )
     }
 
     /// 検出は原理的に不完全なので、ゼロ件でも「安全です」とは言わない
@@ -79,4 +91,11 @@ struct FullScanHeader: View {
 
 #Preview("完了・所見なし") {
     FullScanHeader(phase: .finished(.empty), total: 162)
+}
+
+#Preview("途中で止まった") {
+    FullScanHeader(
+        phase: .interrupted(ScanSummary(scanned: 1_240, notAvailableLocally: 12, missing: 0, dangerPhotos: 3, cautionPhotos: 47)),
+        total: 3_357
+    )
 }

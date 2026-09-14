@@ -14,11 +14,13 @@ import Testing
 struct FullScanStateTests {
     private let cardText = [RecognizedText(text: "4111 1111 1111 1111", confidence: 1, region: .test)]
     private let twoAssets: [AssetMetadata] = [.stub(id: "1"), .stub(id: "2")]
+    private let threeAssets: [AssetMetadata] = [.stub(id: "1"), .stub(id: "2"), .stub(id: "3")]
 
     private func makeState(
         pixels: SpyPixelSourceService,
         ocr: SpyOCRService = SpyOCRService(),
-        records: SpyScanRecordRepository = SpyScanRecordRepository()
+        records: SpyScanRecordRepository = SpyScanRecordRepository(),
+        continuation: SpyContinuedProcessingService = SpyContinuedProcessingService()
     ) -> FullScanState {
         withDependencies {
             $0.pixelSource = pixels
@@ -26,6 +28,7 @@ struct FullScanStateTests {
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = records
             $0.network = SpyNetworkStatusService(unmetered: false)
+            $0.continuedProcessing = continuation
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             FullScanState()
@@ -36,14 +39,25 @@ struct FullScanStateTests {
         SpyPixelSourceService(outcome: .data(Data("image".utf8)))
     }
 
-    /// .task は一覧から戻るたびに走る。2回目が素通りしないと診断が再開してしまう
+    /// 開始は同期で返る（View が待つと State を掴み続けて閉じられなくなる）ので、テストでは終わりを待つ
+    private func start(_ state: FullScanState, assets: [AssetMetadata]) async {
+        state.startIfNeeded(assets: assets, quality: .quick)
+        await state.waitUntilSettled()
+    }
+
+    private func restart(_ state: FullScanState, assets: [AssetMetadata]) async {
+        state.restart(assets: assets, quality: .quick)
+        await state.waitUntilSettled()
+    }
+
+    /// onAppear は一覧から戻るたびに走る。2回目が素通りしないと診断が再開してしまう
     @Test("完了後に画面へ戻っても診断は再開しない")
     func startIfNeededRunsOnlyOnce() async {
         let pixels = makePixels()
         let state = makeState(pixels: pixels)
 
-        await state.startIfNeeded(assets: twoAssets, quality: .quick)
-        await state.startIfNeeded(assets: twoAssets, quality: .quick)
+        await start(state, assets: twoAssets)
+        await start(state, assets: twoAssets)
 
         #expect(await pixels.requestedIDs.count == 2)
     }
@@ -53,8 +67,8 @@ struct FullScanStateTests {
         let pixels = makePixels()
         let state = makeState(pixels: pixels)
 
-        await state.startIfNeeded(assets: twoAssets, quality: .quick)
-        await state.restart(assets: twoAssets, quality: .quick)
+        await start(state, assets: twoAssets)
+        await restart(state, assets: twoAssets)
 
         #expect(await pixels.requestedIDs.count == 4)
     }
@@ -63,7 +77,7 @@ struct FullScanStateTests {
     func collectsFlaggedPhotos() async {
         let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText))
 
-        await state.startIfNeeded(assets: twoAssets, quality: .quick)
+        await start(state, assets: twoAssets)
 
         #expect(Set(state.flagged.map(\.assetID)) == ["1", "2"])
         #expect(state.phase == .finished(ScanSummary(
@@ -76,7 +90,7 @@ struct FullScanStateTests {
     func noFlaggedWhenClean() async {
         let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: []))
 
-        await state.startIfNeeded(assets: twoAssets, quality: .quick)
+        await start(state, assets: twoAssets)
 
         #expect(state.flagged.isEmpty)
     }
@@ -85,8 +99,8 @@ struct FullScanStateTests {
     func restartClearsFlagged() async {
         let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText))
 
-        await state.startIfNeeded(assets: twoAssets, quality: .quick)
-        await state.restart(assets: twoAssets, quality: .quick)
+        await start(state, assets: twoAssets)
+        await restart(state, assets: twoAssets)
 
         #expect(state.flagged.count == 2)
     }
@@ -105,9 +119,44 @@ struct FullScanStateTests {
         )
         let state = makeState(pixels: pixels, records: SpyScanRecordRepository(records: [record]))
 
-        await state.startIfNeeded(assets: [.stub(id: "1")], quality: .quick)
+        await start(state, assets: [.stub(id: "1")])
 
         #expect(state.flagged.map(\.assetID) == ["1"])
         #expect(await pixels.requestedIDs.isEmpty)
+    }
+
+    // MARK: - 中断
+
+    /// OS に打ち切られた（Live Activity から中止された）ら、途中の数字を完了として見せない
+    @Test("全件流れ切る前に止まったら interrupted になる")
+    func interruptedWhenStoppedEarly() async {
+        let state = makeState(
+            pixels: makePixels(),
+            continuation: SpyContinuedProcessingService(expiresAfterReports: 1)
+        )
+
+        await start(state, assets: threeAssets)
+
+        // 1枚目の報告で打ち切られるので、流れるのは1枚だけ
+        #expect(state.phase == .interrupted(ScanSummary(
+            scanned: 1, notAvailableLocally: 0, missing: 0, dangerPhotos: 0, cautionPhotos: 0
+        )))
+        #expect(state.total == 3)
+    }
+
+    /// 「続きを診断」は restart。記録がある分は診断せずに流れるので、実際に続きから走る
+    @Test("中断後に続きを診断すると finished になる")
+    func resumesAfterInterruption() async {
+        let state = makeState(
+            pixels: makePixels(),
+            continuation: SpyContinuedProcessingService(expiresAfterReports: 1)
+        )
+
+        await start(state, assets: threeAssets)
+        await restart(state, assets: threeAssets)
+
+        #expect(state.phase == .finished(ScanSummary(
+            scanned: 3, notAvailableLocally: 0, missing: 0, dangerPhotos: 0, cautionPhotos: 0
+        )))
     }
 }

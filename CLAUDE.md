@@ -16,12 +16,13 @@
 ## ビルド / テスト
 
 ```bash
-xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
-xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.4'
+xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 ```
 
 - **プロジェクトは `PhotoDock/PhotoDock.xcodeproj`（repo ルートの1段下）**、ソースは隣の `PhotoDock/PhotoDock/`。repo ルートから叩くときは `-project` が必須（`scripts/arch-check.sh` の `APP` と CI も同じパス前提）
-- iOS 18.0 / Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`（既定 MainActor だと Core protocol が暗黙隔離され恒常ルール3と衝突するので戻さない）
+- iOS 26.0（2026-09-12 に 18.0 から引き上げ。理由は brief）/ Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`（既定 MainActor だと Core protocol が暗黙隔離され恒常ルール3と衝突するので戻さない）
+- Info.plist は `PhotoDock/PhotoDock/Info.plist`（`BGTaskSchedulerPermittedIdentifiers` のみ。他のキーは `INFOPLIST_KEY_*` で生成し、ビルド時に合成される）。フォルダ同期グループの中にあるので、pbxproj の exception set で Copy Bundle Resources から外してある（外さないと「Multiple commands produce Info.plist」）
 - SourceKit の diagnostics（`No such module 'Dependencies'` 等）はインデックス誤検知が多い。真実は xcodebuild の結果
 - **Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する（brief 参照）
 

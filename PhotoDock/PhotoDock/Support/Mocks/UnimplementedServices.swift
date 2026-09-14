@@ -63,3 +63,9 @@ struct UnimplementedNetworkStatusService: NetworkStatusService {
         fatalError("UnimplementedNetworkStatusService.isOnUnmeteredNetwork() が呼ばれた（テストで上書きすること）")
     }
 }
+
+struct UnimplementedContinuedProcessingService: ContinuedProcessingService {
+    func begin(_ work: ContinuedWork, onExpire: @escaping @Sendable () -> Void) async -> ContinuedProcessingSession? {
+        fatalError("UnimplementedContinuedProcessingService.begin(_:onExpire:) が呼ばれた（テストで上書きすること）")
+    }
+}

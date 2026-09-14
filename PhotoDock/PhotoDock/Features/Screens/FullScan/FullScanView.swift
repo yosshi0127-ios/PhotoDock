@@ -5,9 +5,10 @@
 
 import SwiftUI
 
-/// 全量スキャン（第2段）。開いた瞬間に走り出し、画面を離れると止まる。
+/// 全量スキャン（第2段）。開いた瞬間に走り出し、画面を閉じると止まる。
 /// 進捗を上に固定し、所見のあった写真は診断中からその下に増えていく
 /// （数十分かかる処理なので、終わるまで結果が見えないのは長すぎる）。
+/// 写真詳細を開いている間も、アプリを離れても（OS に申告済み）診断は続く。
 struct FullScanView: View {
     let assets: [AssetMetadata]
     let quality: ScanQuality
@@ -29,24 +30,29 @@ struct FullScanView: View {
         .navigationTitle("診断")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if case .finished = state.phase {
+            if let rerunTitle {
                 ToolbarItem(placement: .topBarTrailing) {
                     // action: に関数参照を直接渡すと Preview のコード変換だけが壊れる
-                    Button("もう一度診断") { rescan() }
+                    Button(rerunTitle) { rerun() }
                 }
             }
         }
-        // .task は詳細から戻るたびに走るので、自動開始は State 側で一度きりに絞る
-        .task { await state.startIfNeeded(assets: assets, quality: quality, allowsDownload: allowsDownload) }
+        // .task ではなく onAppear で同期に始める。.task は子画面を push しただけでキャンセルされるうえ、
+        // 終わりまで await すると State を掴み続けて画面を閉じても捨てられない。
+        // 詳細から戻るたびに走るので、自動開始は State 側で一度きりに絞る
+        .onAppear { state.startIfNeeded(assets: assets, quality: quality, allowsDownload: allowsDownload) }
     }
 
     @ViewBuilder
     private var content: some View {
-        if case let .finished(summary) = state.phase {
+        switch state.phase {
+        case let .finished(summary), let .interrupted(summary):
             ScanCountsView(summary: summary)
                 .padding(.horizontal)
             elapsed
                 .padding(.horizontal)
+        case .idle, .scanning:
+            EmptyView()
         }
 
         if state.flagged.isEmpty {
@@ -66,7 +72,12 @@ struct FullScanView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding()
-        default:
+        case .interrupted:
+            Text("ここまでに所見のある写真はありません")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding()
+        case .idle, .scanning:
             Text("所見のある写真がここに増えていきます")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -81,8 +92,17 @@ struct FullScanView: View {
         }
     }
 
-    private func rescan() {
-        Task { await state.restart(assets: assets, quality: quality, allowsDownload: allowsDownload) }
+    /// 完了後と中断後にだけ出す。中断後は「続き」と言う（記録があるので実際に続きから走る）
+    private var rerunTitle: String? {
+        switch state.phase {
+        case .finished: "もう一度診断"
+        case .interrupted: "続きを診断"
+        case .idle, .scanning: nil
+        }
+    }
+
+    private func rerun() {
+        state.restart(assets: assets, quality: quality, allowsDownload: allowsDownload)
     }
 }
 

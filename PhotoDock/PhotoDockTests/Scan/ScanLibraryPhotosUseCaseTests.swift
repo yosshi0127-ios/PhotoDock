@@ -39,7 +39,8 @@ struct ScanLibraryPhotosUseCaseTests {
         pixels: any PixelSourceService,
         ocr: SpyOCRService = SpyOCRService(),
         records: SpyScanRecordRepository = SpyScanRecordRepository(),
-        network: SpyNetworkStatusService = SpyNetworkStatusService(unmetered: false)
+        network: SpyNetworkStatusService = SpyNetworkStatusService(unmetered: false),
+        continuation: SpyContinuedProcessingService = SpyContinuedProcessingService()
     ) async -> [ScanRecord] {
         await withDependencies {
             $0.pixelSource = pixels
@@ -47,6 +48,7 @@ struct ScanLibraryPhotosUseCaseTests {
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = records
             $0.network = network
+            $0.continuedProcessing = continuation
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = ScanLibraryPhotosUseCase()
@@ -124,6 +126,7 @@ struct ScanLibraryPhotosUseCaseTests {
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = SpyScanRecordRepository()
             $0.network = SpyNetworkStatusService(unmetered: false)
+            $0.continuedProcessing = SpyContinuedProcessingService()
         } operation: {
             let useCase = ScanLibraryPhotosUseCase()
 
@@ -257,5 +260,120 @@ struct ScanLibraryPhotosUseCaseTests {
         #expect(await pixels.requestedModes.allSatisfy { $0 == .localOnly })
         // 回線の判定はスキャン開始時に1回だけ
         #expect(await network.callCount == 1)
+    }
+
+    // MARK: - バックグラウンド継続
+
+    /// アプリを離れても診断が続く根拠。申告しないと数秒でサスペンドされる
+    @Test("診断する写真があれば継続を申告し、全件流し終えたら成功で閉じる")
+    func beginsContinuationAndEndsWithSuccess() async {
+        let spy = SpyContinuedProcessingService()
+
+        let records = await scanAll(assets(5), pixels: ConcurrencyProbePixelSourceService(), continuation: spy)
+
+        #expect(records.count == 5)
+        #expect(await spy.begun == [ContinuedWork(title: "写真を診断しています", subtitle: "0 / 5 枚", totalUnits: 5)])
+        #expect(await spy.ended == [true])
+    }
+
+    /// OS は進捗が進まないタスクを優先的に打ち切る。1枚ごとに報告していることを固定する
+    @Test("進捗は1枚ごとに報告され、最後は全件になる")
+    func reportsProgressPerPhoto() async {
+        let spy = SpyContinuedProcessingService()
+
+        _ = await scanAll(assets(5), pixels: ConcurrencyProbePixelSourceService(), continuation: spy)
+
+        let reports = await spy.reports
+        #expect(reports.map(\.completedUnits) == [1, 2, 3, 4, 5])
+        #expect(reports.last?.subtitle == "5 / 5 枚")
+    }
+
+    /// 進捗の分母は全件。記録で済んだ分は申告の時点で完了に数える（画面のヘッダと同じ数字）
+    @Test("記録で済んだ分は申告前に完了として数える")
+    func countsReusedRecordsBeforeBeginning() async {
+        let targets = assets(5)
+        let spy = SpyContinuedProcessingService()
+        let existing = targets.prefix(3).map { validRecord($0.id) }
+
+        _ = await scanAll(
+            targets, pixels: SpyPixelSourceService(outcome: .data(Data("image".utf8))),
+            records: SpyScanRecordRepository(records: existing), continuation: spy
+        )
+
+        #expect(await spy.begun.first?.subtitle == "3 / 5 枚")
+        #expect(await spy.reports.map(\.completedUnits) == [4, 5])
+    }
+
+    /// 1秒で終わる処理を申告すると Live Activity が一瞬出て消えるだけになる
+    @Test("全件が記録で済むなら申告しない")
+    func skipsContinuationWhenNothingToScan() async {
+        let spy = SpyContinuedProcessingService()
+        let repo = SpyScanRecordRepository(records: assets(3).map { validRecord($0.id) })
+
+        let records = await scanAll(
+            assets(3), pixels: SpyPixelSourceService(outcome: .data(Data("image".utf8))),
+            records: repo, continuation: spy
+        )
+
+        #expect(records.count == 3)
+        #expect(await spy.begun.isEmpty)
+        #expect(await spy.ended.isEmpty)
+    }
+
+    /// 申告は延命であって処理の開始条件ではない
+    @Test("申告できない環境でも診断は全件進む")
+    func scansWithoutContinuation() async {
+        let spy = SpyContinuedProcessingService(isSupported: false)
+
+        let records = await scanAll(assets(5), pixels: ConcurrencyProbePixelSourceService(), continuation: spy)
+
+        #expect(records.count == 5)
+        #expect(await spy.ended.isEmpty)
+    }
+
+    /// ユーザーが Live Activity から中止したら、それ以上診断を積まない。打ち切りは失敗として閉じる
+    @Test("OS に打ち切られたら残りは診断されず、失敗で閉じる")
+    func expirationStopsScanning() async throws {
+        let probe = ConcurrencyProbePixelSourceService()
+        let spy = SpyContinuedProcessingService(expiresAfterReports: 3)
+
+        let records = await scanAll(assets(50), concurrency: 2, pixels: probe, continuation: spy)
+
+        // 3枚目の報告の直後に止まる。流れた分と OS への報告の順序は決まっている（end → finish）
+        #expect(records.count == 3)
+        #expect(await spy.ended == [false])
+
+        // 待っても増えない = 完全に止まっている
+        let afterStop = await probe.callCount
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(afterStop < 50)
+        #expect(await probe.callCount == afterStop)
+    }
+
+    /// 画面を離れて止めたときも、OS に「終わった」と伝えないと Live Activity が残る
+    @Test("消費側が途中でやめたら失敗で閉じる")
+    func consumerLeavingEndsWithFailure() async throws {
+        let spy = SpyContinuedProcessingService()
+
+        await withDependencies {
+            $0.pixelSource = ConcurrencyProbePixelSourceService()
+            $0.ocr = SpyOCRService()
+            $0.faceDetection = SpyFaceDetectionService()
+            $0.scanRecords = SpyScanRecordRepository()
+            $0.network = SpyNetworkStatusService(unmetered: false)
+            $0.continuedProcessing = spy
+        } operation: {
+            let useCase = ScanLibraryPhotosUseCase()
+
+            var count = 0
+            for await _ in useCase(assets: assets(20), quality: .quick, concurrency: 2) {
+                count += 1
+                if count == 3 { break }
+            }
+        }
+
+        // 離脱後の end は走っていた分が終わってから届くので、少し待つ
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await spy.ended == [false])
     }
 }
