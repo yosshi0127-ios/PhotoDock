@@ -208,6 +208,8 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 **`BGTask` は Sendable でないので actor から actor へ渡せない**（「sending 'task' risks causing data races」）。OS の launch handler から受け取る1箇所だけ `nonisolated(unsafe) let` で送り、以後は1つの actor の中に閉じ込めて外とは ID だけをやり取りする。なお `BGContinuedProcessingTask` の launch handler 登録は「起動完了前に」の縛りから除外されている（SDK ヘッダに明記）ので、Infrastructure の中で最初の申告時に登録できる。
 
+**GitHub の macOS ランナーでは Vision が返ってこず、テストプロセス全体が固まる。** GPU の無い VM 上のシミュレータで `VNRecognizeTextRequest` を実行すると完了せず、同期の `perform` が Swift 並行処理の協調スレッド（ランナーは数本）を全部塞ぐ。Policy のような一瞬で終わるテストまで 1 件も完了せず、6 時間の上限で打ち切られる（2026-09-10 / 09-11 の run）。**Vision を本物で回す 2 スイート（`VisionOCRServiceTests` / `StubPixelSourceServiceTests`）は CI では `-skip-testing` で外し、ローカルで回す。** macOS ジョブには `timeout-minutes` を付けて固まっても 30 分で落とす。
+
 **Vision の文字認識はバックグラウンドで GPU を使えず止まる。compute device の指定では回避できない。** 背景では `IOGPUMetalError: Insufficient Permission (to submit GPU work from background)` になる。`setComputeDevice(_:for:)` で Neural Engine / CPU を選んでも、前処理が Metal を使うので同じ。UIKit の背景猶予（約30秒）が切れた瞬間に詰まり、進捗ゼロが45秒続くと dasd が `marking stalled` → BGContinuedProcessingTask を打ち切る。理由はアプリ側のログに出ない — **Console.app で `dasd` プロセスを見る**。正解は entitlement「Background GPU Access」+ `requiredResources = .gpu` だが、**個人の開発チームでは provisioning が拒否される**（有料プログラムが必要）。いまは `.gpu` を要求して拒否されたら継続しない。
 
 **actor のメソッド内で作った普通のクロージャは「その actor に隔離」と推論される。OS のコールバックに渡すと実機で落ちる**（「Incorrect actor executor assumption; expected '...Service' executor」）。ObjC から来る `(BGTask) -> Void` や `expirationHandler: (() -> Void)?` は `@Sendable` が付いていないので、この推論が黙って働く。コンパイルは通り、OS が自分のキューから呼んだ瞬間に実行時チェックで落ちる。**OS に渡すクロージャには `@Sendable` を明示**し、actor に触るのは中で `Task { await self... }` を挟む。

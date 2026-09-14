@@ -3,7 +3,8 @@ name: CI
 # README「規約の機械検査」の節と同じ内容を CI でも回す。
 #   1. scripts/arch-check.sh  … 恒常ルール5（DI 3値 / 1依存1ファイル / Core protocol の登録漏れ / liveValue）
 #   2. swiftlint --strict     … 恒常ルール1〜4（層違反・注入点違反・Policy の純粋性）
-#   3. xcodebuild test        … Unit（Policy / UseCase / live 登録）+ UI（live 実装の通し）
+#   3. xcodebuild test        … Unit（Policy / UseCase / live 登録）+ UI（live 実装の通し）。
+#                               Vision を本物で回す 2 スイートは除く（下記コメント参照）
 #
 # arch-check は bash + grep だけなので Linux ランナーに置く（macOS ランナーは課金レートが高いため、
 # 層違反の検出は先に安いジョブで落とす）。
@@ -39,6 +40,8 @@ jobs:
   lint-and-test:
     name: SwiftLint + build/test
     runs-on: macos-latest
+    # ローカルでは 1 分で終わる。固まったら GitHub の上限（6 時間）まで待たずに落とす
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -68,13 +71,19 @@ jobs:
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices | grep "$udid"
 
-      - name: テスト（Unit + UI）
+      # Vision を本物で回す 2 スイートは CI では回さない。GitHub の macOS ランナー（GPU の無い VM）では
+      # シミュレータ上の VNRecognizeTextRequest が返ってこず、同期呼び出しが協調スレッドを塞いで
+      # テストプロセス全体が固まる（2026-09-10 / 09-11 の run はどちらも 97 件が started のまま 6 時間で打ち切り）。
+      # この 2 スイートはローカルのシミュレータで回す（CLAUDE.md「ビルド / テスト」）。
+      - name: テスト（Unit + UI・Vision 実行を除く）
         run: |
           set -o pipefail
           xcodebuild test \
             -project PhotoDock/PhotoDock.xcodeproj \
             -scheme PhotoDock \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -skip-testing:PhotoDockTests/VisionOCRServiceTests \
+            -skip-testing:PhotoDockTests/StubPixelSourceServiceTests \
             -skipMacroValidation \
             -resultBundlePath TestResults.xcresult
 

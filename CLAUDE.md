@@ -38,7 +38,7 @@ Swift ファイル編集時は PostToolUse hook で SwiftLint が自動実行さ
 swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違反あり
 ```
 
-同じ2つ + テストは CI（`.github/workflows/ci.yml`）でも回る。
+同じ2つ + テストは CI（`.github/workflows/ci.yml`）でも回る。ただし **Vision を本物で回す `VisionOCRServiceTests` と `StubPixelSourceServiceTests` は CI では skip**（GitHub の macOS ランナーでは Vision が返ってこずテスト全体が固まる）。この2つはローカルの `xcodebuild test` で確認する。
 
 ## スキルカタログ（該当する話題では必ず Skill ツールで発火する）
 
