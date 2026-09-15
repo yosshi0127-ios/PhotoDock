@@ -32,7 +32,14 @@ xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock -desti
   - `no_infra_in_features` の具象名リストは Infrastructure 実装を追加するたびに育てる
 - 恒常ルール5（DI 3値・1依存1ファイル・登録漏れ・liveValue が本番実装）: `scripts/arch-check.sh`
 
-Swift ファイル編集時は PostToolUse hook で SwiftLint が自動実行される。全体検査は repo ルートで:
+Swift ファイル編集時は PostToolUse hook で SwiftLint が自動実行される。
+
+**作業手順のセンサー（`.claude/settings.json` の hooks）**。スキルカタログを Claude の記憶に頼らず機械で見る:
+
+- `scripts/skill-sensor.sh`（UserPromptSubmit）: 入力にトリガー語があり、該当スキルをこの文脈（直近の compaction 以降）で読んでいなければ注意を注入する。強制ではない
+- `scripts/commit-gate.sh`（PreToolUse / `git commit`）: Swift を変更したのに最後の編集より後に `verify` を読んでいない、View を変更したのに `swiftui-pro` を読んでいない、なら止める。トランスクリプトの Skill 呼び出しで判定するので手動の申告は不要（非常用の抜け道は `GATE_SKIP=1`）
+
+全体検査は repo ルートで:
 
 ```bash
 swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違反あり

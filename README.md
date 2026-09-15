@@ -152,6 +152,13 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 - `.swiftlint.yml` の custom_rules … 層違反・注入点違反・Policy の純粋性（スタイルルールは無効）
 - `scripts/arch-check.sh` … DI 3値・1依存1ファイル・protocol の登録漏れ・liveValue が本番実装
 
+コードの規約だけでなく **Claude の作業手順**も機械で見る（`.claude/settings.json` の hooks）。CLAUDE.md のスキルカタログは「該当する話題では Skill を読む」と書いてあるだけで、読み忘れを誰も検知できなかった。
+
+- `scripts/skill-sensor.sh`（UserPromptSubmit）… 入力のトリガー語に対応するスキルが、この文脈（直近の compaction 以降）で読まれていなければ注意を注入する。トランスクリプト（JSONL）の `Skill` tool_use を jq で数える
+- `scripts/commit-gate.sh`（PreToolUse）… `git commit` の前に「最後の Swift 編集より後に `verify`」「最後の View 編集より後に `swiftui-pro`」が読まれているかをトランスクリプトの出現順で判定し、抜けていれば止める。以前の「レビューしたら `SWIFTUI_REVIEWED=1` を付けて再実行」という手動申告を置き換えた
+
+発想は Android 研修プロジェクトの hooks（キーワード → スキル → トランスクリプトで既読判定）から。
+
 ビルド設定: iOS 26.0（2026-09-12 に 18.0 から引き上げ。理由は brief の「設計方針」）/ Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` / iPhone は縦向き固定。Info.plist は `PhotoDock/PhotoDock/Info.plist`（`BGTaskSchedulerPermittedIdentifiers` だけ。他のキーは `INFOPLIST_KEY_*` で生成し、ビルド時に合成される）。
 
 ## 踏んだ罠（同じ穴を掘らないために）
