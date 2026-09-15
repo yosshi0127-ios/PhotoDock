@@ -24,6 +24,9 @@ struct FlaggedPhotoCell: View {
             .aspectRatio(1, contentMode: .fit)
             .overlay { thumbnail }
             .clipShape(.rect(cornerRadius: 8))
+            // clipShape は描画しか切らない。scaledToFill ではみ出した隣の写真がタップを奪うので、
+            // 判定も見えている正方形に揃える（これが無いと下・右のセルが先に反応する）
+            .contentShape(.rect(cornerRadius: 8))
             // 白い写真だと隣のセルとの境が分からなくなる
             .overlay { RoundedRectangle(cornerRadius: 8).stroke(.separator, lineWidth: 0.5) }
             .overlay(alignment: .topTrailing) { badge }
