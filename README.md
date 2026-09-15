@@ -38,7 +38,9 @@ Features/
   UseCases/          段取り。画面をまたいで共有する
   Screens/
     Home/            1画面 = 1ディレクトリ（State / View / その画面専用の部品）
-    PhotoCheck/
+    FullScan/
+    FlaggedPhotos/
+    PhotoDetail/
 ```
 
 機能名（Scan / Setting …）では切らず、**`UseCases` と `Screens` の2つだけで切る**。理由は3つ。
