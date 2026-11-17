@@ -23,13 +23,16 @@ struct FindingPolicy: Sendable {
         let fromTexts = texts
             .filter { $0.confidence >= rules.minimumConfidence }
             .compactMap { recognized -> Finding? in
-                guard let match = classify(recognized.text) else { return nil }
+                // 判定とマスクは同じ正規化済みの行を見る（全角のメールアドレスを
+                // 判定では拾えたのにマスクでは見つけられない、という食い違いを作らない）
+                let line = recognized.text.normalizedForMatching()
+                guard let match = classify(normalized: line) else { return nil }
 
                 return Finding(
                     kind: match.kind,
                     severity: match.severity,
                     region: recognized.region,
-                    maskedText: masked(recognized.text, as: match.kind)
+                    maskedText: masked(line, as: match.kind)
                 )
             }
 
@@ -79,7 +82,14 @@ struct FindingPolicy: Sendable {
     /// - `パスワード: 090-1234-5678` は認証情報として拾う（ラベル語があれば意図が明確）
     /// - `03-1234-5678` は電話番号。部分文字列が郵便番号の書式にも当たるが、電話が先に勝つ
     /// - `〒150-0041 渋谷区神南1-2-3` は住所。郵便番号より情報量が多いほうを取る
+    ///
+    /// 入口で全角の英数記号とハイフンの異体を半角に寄せる（`normalizedForMatching`）。
+    /// 以降の判定は半角の数字と `-` だけを相手にする。
     func classify(_ text: String) -> (kind: FindingKind, severity: Severity)? {
+        classify(normalized: text.normalizedForMatching())
+    }
+
+    private func classify(normalized text: String) -> (kind: FindingKind, severity: Severity)? {
         if let severity = cardNumberSeverity(in: text) { return (.cardNumber, severity) }
         // 値の書式はラベルより確実なので先に試す
         if hasCredentialValue(text) { return (.credential, .danger) }
@@ -199,7 +209,7 @@ struct FindingPolicy: Sendable {
 
     /// ラベルの直後（空白と区切り記号を飛ばした位置）に、値らしい文字列があるか。
     ///
-    /// 値は「空白を含まない半角の英数記号の並び」とみなす（全角は半角に寄せてから見る）。
+    /// 値は「空白を含まない半角の英数記号の並び」とみなす（全角は入口の正規化で半角に寄っている）。
     /// - `:` や `=` で区切られていれば、その並びをそのまま値とみなす（`Password: correcthorse`）
     /// - 区切りが無いときは数字を含む並びだけを値とみなす。英語の UI 文言
     ///   （`Password reset` / `Password must be ...`）を値と取り違えないため
@@ -207,7 +217,7 @@ struct FindingPolicy: Sendable {
     ///
     /// 取りこぼしても所見は要注意として残る（危険に上がらないだけで、消えはしない）。
     private func startsWithCredentialValue(_ remainder: Substring) -> Bool {
-        var rest = Substring(Self.fullwidthASCIIFolded(remainder)).drop(while: \.isWhitespace)
+        var rest = remainder.drop(while: \.isWhitespace)
 
         let hasSeparator = rest.first.map { Self.credentialValueSeparators.contains($0) } ?? false
         if hasSeparator {
@@ -223,24 +233,6 @@ struct FindingPolicy: Sendable {
     }
 
     private static let credentialValueSeparators: Set<Character> = [":", "="]
-
-    /// 全角の英数記号（U+FF01...U+FF5E）と全角空白を半角に寄せる。カタカナには触らない
-    private static func fullwidthASCIIFolded(_ text: Substring) -> String {
-        var result = ""
-
-        for scalar in text.unicodeScalars {
-            switch scalar.value {
-            case 0xFF01...0xFF5E:
-                result.unicodeScalars.append(Unicode.Scalar(scalar.value - 0xFEE0) ?? scalar)
-            case 0x3000:
-                result.unicodeScalars.append(" ")
-            default:
-                result.unicodeScalars.append(scalar)
-            }
-        }
-
-        return result
-    }
 
     /// 入力にもラベルと同じ正規化を通してから照合する
     /// （`API_KEY` / `api-key` / `API キー` がどれも `apikey` に寄る）

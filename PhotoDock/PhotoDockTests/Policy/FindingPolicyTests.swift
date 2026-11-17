@@ -436,6 +436,88 @@ struct FindingPolicyTests {
         #expect(match?.severity == .caution)
     }
 
+    // MARK: - 入口の正規化（全角・ハイフンの異体）
+
+    /// 日本語の文書では数字が全角で書かれ、ハイフンには見た目の同じ別の文字が使われる
+    @Test("全角の数字とハイフンの異体で書かれていても同じ種類として拾う", arguments: [
+        ("０９０－１２３４－５６７８", FindingKind.phoneNumber),       // 全角
+        ("090ー1234ー5678", .phoneNumber),                        // 長音記号
+        ("090−1234−5678", .phoneNumber),                        // マイナス記号（U+2212）
+        ("03‐1234‐5678", .phoneNumber),                         // ハイフン（U+2010）
+        ("03–1234–5678", .phoneNumber),                         // エンダッシュ（U+2013）
+        ("〒１５０－００４１", .postalCode),
+        ("〒150ー0041", .postalCode),
+        ("渋谷区神南１－２－３", .address),
+        ("渋谷区神南1ー2ー3", .address),
+        ("渋谷区神南1−2−3", .address),
+        ("八王子市万町４ー５", .address),
+        ("ｙａｍａｄａ＠ｅｘａｍｐｌｅ．ｃｏｍ", .email),
+        ("ＡＢ１２３４５６７", .identityDocumentNumber),
+        ("4111‐1111‐1111‐1111", .cardNumber),
+        ("4111　1111　1111　1111", .cardNumber),                  // 全角空白
+        ("４１１１ー１１１１ー１１１１ー１１１１", .cardNumber),
+        ("パスワード：ｈｕｎｔｅｒ２", .credential)
+    ])
+    func widthAndHyphenVariants(_ text: String, _ expected: FindingKind) {
+        #expect(kind(of: text) == expected)
+    }
+
+    @Test("正規化は全角の英数記号とハイフンの異体だけを半角に寄せる", arguments: [
+        ("０９０－１２３４－５６７８", "090-1234-5678"),
+        ("Ａｂｃ＠ｅｘａｍｐｌｅ．ｃｏｍ", "Abc@example.com"),
+        ("1ー2ー3", "1-2-3"),
+        ("1‐2‑3‒4–5—6―7−8", "1-2-3-4-5-6-7-8"),
+        ("全角　空白", "全角 空白")
+    ])
+    func matchNormalization(_ input: String, _ expected: String) {
+        #expect(input.normalizedForMatching() == expected)
+    }
+
+    /// 長音記号を無条件にハイフンへ変えると、カタカナの語が壊れてラベル語に当たらなくなる
+    @Test("数字に挟まれていない長音記号とカタカナはそのまま", arguments: [
+        "パスワード",
+        "サーバー",
+        "コード1",       // 後ろだけ数字
+        "3ーム",         // 前だけ数字
+        "ﾊﾟｽﾜｰﾄﾞ",       // 半角カタカナも全角にしない
+        "渋谷区神南"
+    ])
+    func normalizationKeepsKatakanaAndProlongedSound(_ text: String) {
+        #expect(text.normalizedForMatching() == text)
+    }
+
+    /// 文字を1対1で置き換えるので、正規化した行をそのままマスクしても位置がズレない
+    @Test("正規化しても文字数は変わらない", arguments: [
+        "０９０－１２３４－５６７８",
+        "〒150ー0041 渋谷区神南１−２−３",
+        "ｙａｍａｄａ＠ｅｘａｍｐｌｅ．ｃｏｍ"
+    ])
+    func normalizationKeepsLength(_ text: String) {
+        #expect(text.normalizedForMatching().count == text.count)
+        #expect(text.normalizedForMatching().unicodeScalars.count == text.unicodeScalars.count)
+    }
+
+    @Test("正規化は2回かけても結果が変わらない")
+    func normalizationIsIdempotent() {
+        let once = "〒１５０ー００４１　０９０−１２３４−５６７８".normalizedForMatching()
+
+        #expect(once.normalizedForMatching() == once)
+    }
+
+    /// 判定は正規化後、マスクは元の文字列、と分かれていると、全角のメールアドレスを
+    /// 判定では拾えるのにマスクでは見つけられず、本文がそのまま出てしまう
+    @Test("全角で書かれた行もマスクされる", arguments: [
+        ("ｙａｍａｄａ＠ｅｘａｍｐｌｅ．ｃｏｍ", "y*****@example.com"),
+        ("０９０－１２３４－５６７８", "***-****-5678"),
+        ("渋谷区神南１ー２ー３", "渋谷区神南*-*-*"),
+        ("４１１１　１１１１　１１１１　１１１１", "**** **** **** 1111")
+    ])
+    func fullWidthLinesAreMasked(_ input: String, _ expected: String) {
+        let texts = [RecognizedText(text: input, confidence: 1, region: .test)]
+
+        #expect(sut.findings(in: texts).first?.maskedText == expected)
+    }
+
     @Test("何も該当しない行は所見にならない", arguments: [
         "こんにちは",
         "2026年9月8日",
