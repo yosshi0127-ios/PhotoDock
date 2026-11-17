@@ -23,6 +23,10 @@ struct FindingRules: Sendable {
     /// ここに無い語は取りこぼす前提で、値の書式による検出と併用する
     let credentialLabels: [CredentialLabel]
 
+    /// ラベル語の直後に続く文字列を「値」とみなす最小の長さ。4 は暗証番号の桁数
+    /// （`暗証番号 1234` を拾い、`Password: On` のような設定値や記号1つを拾わない）
+    let credentialValueMinLength: Int
+
     /// Luhn を適用する桁数の範囲（区切り記号を除去した後）
     let cardNumberDigits: ClosedRange<Int>
 
@@ -57,6 +61,7 @@ struct FindingRules: Sendable {
             CredentialLabel("Access Token"),
             CredentialLabel("Private Key")
         ],
+        credentialValueMinLength: 4,
         cardNumberDigits: 13...19,
         maskedTrailingDigits: 4,
         bystanderFaceMaxArea: 0.02,

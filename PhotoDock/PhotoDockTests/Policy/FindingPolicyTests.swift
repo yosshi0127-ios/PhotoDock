@@ -47,7 +47,7 @@ struct FindingPolicyTests {
 
     // MARK: - 認証情報
 
-    @Test("ラベル語がある行は認証情報として危険", arguments: [
+    @Test("ラベル語の後ろに値が続く行は認証情報として危険", arguments: [
         "パスワード: hunter2",
         "暗号化キー AbCd1234",
         "Password: correcthorse",
@@ -61,6 +61,88 @@ struct FindingPolicyTests {
 
         #expect(match?.kind == .credential)
         #expect(match?.severity == .danger)
+    }
+
+    /// 区切り記号・空白・全角の揺れがあっても、値が続いていれば危険
+    @Test("値の続き方の揺れを吸収する", arguments: [
+        "パスワード：hunter2",            // 全角コロン
+        "パスワード:hunter2",             // 空白なし
+        "password = hunter2",
+        "PASSWORD=correcthorse",
+        "暗証番号1234",                   // 区切りも空白もなし
+        "パスワード　ｈｕｎｔｅｒ２",      // 全角空白 + 全角英数
+        "Wi-Fi パスワード: abcd-efgh",    // 行の途中にラベル
+        "API_KEY=abcdEFGHijkl"
+    ])
+    func credentialValueVariants(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .credential)
+        #expect(match?.severity == .danger)
+    }
+
+    /// ログイン画面や設定画面のスクショにはラベル語だけが出る。値は写っていないので断定しない。
+    /// それでも所見には残す（値が次の行にある付箋やルーターのラベルを落とさないため）
+    @Test("ラベル語だけの行は認証情報だが要注意どまり", arguments: [
+        "パスワード",
+        "パスワードを忘れた方はこちら",
+        "パスワードを変更",
+        "パスワード（8文字以上）",
+        "パスワードは8文字以上で入力してください",
+        "パスワード:",
+        "Forgot password?",
+        "Password reset",
+        "Password must be at least 8 characters",
+        "暗証番号を入力",
+        "暗号化キー"
+    ])
+    func credentialLabelWithoutValue(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .credential)
+        #expect(match?.severity == .caution)
+    }
+
+    /// 入力欄の伏せ字は値ではない（写っているのは「何か入力されている」ことだけ）
+    @Test("伏せ字になっている入力欄は要注意どまり", arguments: [
+        "Password: ********",
+        "パスワード: ••••••••",
+        "パスワード ●●●●●●●●",
+        "Password: ----"
+    ])
+    func maskedFieldIsNotAValue(_ text: String) {
+        #expect(sut.classify(text)?.severity == .caution)
+    }
+
+    /// 4 は暗証番号の桁数。それより短い並びは設定値（On / Off）や記号のことが多い
+    @Test("値とみなすのは4文字以上")
+    func credentialValueMinimumLength() {
+        #expect(sut.classify("Password: On")?.severity == .caution)
+        #expect(sut.classify("暗証番号 123")?.severity == .caution)
+        #expect(sut.classify("暗証番号 1234")?.severity == .danger)
+    }
+
+    /// 区切り記号が無いときは、数字を含む並びだけを値とみなす
+    @Test("区切りの無い英単語は値とみなさないが、数字を含めば値")
+    func credentialValueWithoutSeparatorNeedsDigit() {
+        #expect(sut.classify("Password correcthorse")?.severity == .caution)
+        #expect(sut.classify("Password hunter2")?.severity == .danger)
+    }
+
+    @Test("同じ行にラベルが複数あるとき、どれか1つに値が続けば危険")
+    func anyLabelOccurrenceWithValueIsDanger() {
+        #expect(sut.classify("パスワードを忘れた？ パスワード: hunter2")?.severity == .danger)
+        #expect(sut.classify("パスワード 暗証番号 1234")?.severity == .danger)
+    }
+
+    @Test("危険度は findings まで引き継がれる")
+    func credentialSeverityReachesFindings() {
+        let texts = [
+            RecognizedText(text: "パスワードを忘れた方はこちら", confidence: 1, region: .test),
+            RecognizedText(text: "パスワード: hunter2", confidence: 1, region: .test)
+        ]
+
+        #expect(sut.findings(in: texts).map(\.severity) == [.caution, .danger])
     }
 
     /// ラベル語は電話番号より先に試す。ラベルがあれば意図が明確なので、そちらを採る
@@ -369,6 +451,7 @@ struct FindingPolicyTests {
                 minimumConfidence: 0.95,
                 municipalityMarkers: FindingRules.standard.municipalityMarkers,
                 credentialLabels: FindingRules.standard.credentialLabels,
+                credentialValueMinLength: FindingRules.standard.credentialValueMinLength,
                 cardNumberDigits: FindingRules.standard.cardNumberDigits,
                 maskedTrailingDigits: FindingRules.standard.maskedTrailingDigits,
                 bystanderFaceMaxArea: FindingRules.standard.bystanderFaceMaxArea,

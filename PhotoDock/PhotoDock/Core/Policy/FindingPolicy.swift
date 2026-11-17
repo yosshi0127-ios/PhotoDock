@@ -83,7 +83,7 @@ struct FindingPolicy: Sendable {
         if hasCardNumber(text) { return (.cardNumber, .danger) }
         // 値の書式はラベルより確実なので先に試す
         if hasCredentialValue(text) { return (.credential, .danger) }
-        if hasCredentialLabel(text) { return (.credential, .danger) }
+        if let severity = credentialLabelSeverity(in: text) { return (.credential, severity) }
         if text.contains(/\b[A-Z]{2}[0-9]{7}\b/) { return (.identityDocumentNumber, .caution) }
         if text.contains(emailPattern) { return (.email, .caution) }
         if hasAddress(text) { return (.address, .caution) }
@@ -125,8 +125,64 @@ struct FindingPolicy: Sendable {
         return sum.isMultiple(of: 10)
     }
 
-    private func hasCredentialLabel(_ text: String) -> Bool {
-        matchedCredentialLabel(in: text) != nil
+    /// ラベル語がある行の危険度。ラベルが無ければ nil。
+    ///
+    /// ラベル語があるだけでは「値が写っている」とは言えない。ログイン画面の
+    /// 「パスワードを忘れた方」や設定画面の「パスワードを変更」にもラベル語は出る。
+    /// - ラベルの直後に値らしい文字列が続く → **危険**（`パスワード: hunter2`）
+    /// - ラベルだけ → **要注意**（値が次の行にある付箋やルーターのラベルを落とさないため、所見には残す）
+    ///
+    /// 同じ行にラベルが複数回出るときは、どれか1つに値が続けば危険とする。
+    private func credentialLabelSeverity(in text: String) -> Severity? {
+        let remainders = rules.credentialLabels.flatMap { $0.remainders(in: text) }
+        guard !remainders.isEmpty else { return nil }
+
+        return remainders.contains(where: startsWithCredentialValue) ? .danger : .caution
+    }
+
+    /// ラベルの直後（空白と区切り記号を飛ばした位置）に、値らしい文字列があるか。
+    ///
+    /// 値は「空白を含まない半角の英数記号の並び」とみなす（全角は半角に寄せてから見る）。
+    /// - `:` や `=` で区切られていれば、その並びをそのまま値とみなす（`Password: correcthorse`）
+    /// - 区切りが無いときは数字を含む並びだけを値とみなす。英語の UI 文言
+    ///   （`Password reset` / `Password must be ...`）を値と取り違えないため
+    /// - 伏せ字（`********`）のように英数字を1つも含まない並びは値ではない
+    ///
+    /// 取りこぼしても所見は要注意として残る（危険に上がらないだけで、消えはしない）。
+    private func startsWithCredentialValue(_ remainder: Substring) -> Bool {
+        var rest = Substring(Self.fullwidthASCIIFolded(remainder)).drop(while: \.isWhitespace)
+
+        let hasSeparator = rest.first.map { Self.credentialValueSeparators.contains($0) } ?? false
+        if hasSeparator {
+            rest = rest.dropFirst().drop(while: \.isWhitespace)
+        }
+
+        let token = rest.prefix { $0.isASCII && !$0.isWhitespace }
+
+        guard token.count >= rules.credentialValueMinLength,
+              token.contains(where: { $0.isLetter || $0.isNumber }) else { return false }
+
+        return hasSeparator || token.contains(where: \.isNumber)
+    }
+
+    private static let credentialValueSeparators: Set<Character> = [":", "="]
+
+    /// 全角の英数記号（U+FF01...U+FF5E）と全角空白を半角に寄せる。カタカナには触らない
+    private static func fullwidthASCIIFolded(_ text: Substring) -> String {
+        var result = ""
+
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0xFF01...0xFF5E:
+                result.unicodeScalars.append(Unicode.Scalar(scalar.value - 0xFEE0) ?? scalar)
+            case 0x3000:
+                result.unicodeScalars.append(" ")
+            default:
+                result.unicodeScalars.append(scalar)
+            }
+        }
+
+        return result
     }
 
     /// 入力にもラベルと同じ正規化を通してから照合する
