@@ -324,6 +324,74 @@ struct FindingPolicyTests {
         #expect(kind(of: "新宿区 3番線のりば") != .address)
     }
 
+    @Test("番地の書き方の揺れを拾う", arguments: [
+        "新宿区西新宿2-8-1",
+        "新宿区西新宿 2-8-1",                    // 町名と番地の間に空白
+        "〒160-0023 東京都新宿区西新宿2-8-1",
+        "港区芝公園4-2-8-1203",                  // 部屋番号つき
+        "大阪市北区梅田1丁目2番3号",
+        "札幌市中央区北1条西2丁目",
+        "中野区本町1番2号",
+        "町田市原町田1234-5",                    // 番地が4桁
+        "八王子市万町4-5",                       // 丁目の無い町（2連）
+        "渋谷区神南1丁目2-3"
+    ])
+    func addressBlockNumberVariants(_ text: String) {
+        #expect(kind(of: text) == .address)
+    }
+
+    /// `2026-09-12` は「数字-数字-数字」の形をしている。市区町村の文字が同じ行にあるだけで
+    /// 住所になっていた
+    @Test("日付を番地とみなさない", arguments: [
+        "横浜市 2026-09-12",
+        "区分 2025-01-01",
+        "渋谷区 2026-9-12",          // 0 埋めなし
+        "川崎市 25-01-01 更新",       // 西暦2桁
+        "市民税 2026-06-30 納期限"
+    ])
+    func dateIsNotAddress(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
+    /// 電話番号も「数字-数字-数字」の形。住所を先に試すので、住所が取ってしまっていた
+    @Test("市区町村の文字と同じ行にある電話番号は、住所ではなく電話番号", arguments: [
+        "渋谷区役所 03-1234-5678",
+        "横浜市コールセンター 045-123-4567",
+        "新宿区 090-1234-5678"
+    ])
+    func phoneNumberAfterMunicipalityIsPhone(_ text: String) {
+        #expect(kind(of: text) == .phoneNumber)
+    }
+
+    @Test("桁の多い通し番号を番地とみなさない", arguments: [
+        "市場 1234-5678-9012",        // 12桁
+        "区画 12-345-67-89-10"        // 5連
+    ])
+    func serialNumberIsNotAddress(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
+    /// 住所は「市区町村 → 町名 → 番地」の順に書く
+    @Test("番地より前に市区町村の文字が無ければ住所にしない", arguments: [
+        "神南1-2-3",
+        "1-2-3 渋谷区",
+        "2丁目 町内会"
+    ])
+    func blockNumberNeedsMunicipalityBefore(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
+    /// 2連は時刻の範囲や点数にも当たる。町名に直接続くときだけ番地とみなす
+    @Test("町名に続かない2連の数字は番地とみなさない", arguments: [
+        "川崎市 3-2 で勝利",
+        "渋谷区役所 8:30-17:15",
+        "新宿区 10-20% オフ",
+        "港区(1-2)"
+    ])
+    func detachedPairIsNotAddress(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
     // MARK: - 電話番号・郵便番号・メール・パスポート
 
     @Test("携帯と固定の書式を電話番号として拾う", arguments: [
@@ -538,6 +606,8 @@ struct FindingPolicyTests {
             rules: FindingRules(
                 minimumConfidence: 0.95,
                 municipalityMarkers: FindingRules.standard.municipalityMarkers,
+                addressBlockGroupDigits: FindingRules.standard.addressBlockGroupDigits,
+                addressBlockMaxDigits: FindingRules.standard.addressBlockMaxDigits,
                 credentialLabels: FindingRules.standard.credentialLabels,
                 credentialValueMinLength: FindingRules.standard.credentialValueMinLength,
                 cardNumberDigits: FindingRules.standard.cardNumberDigits,
