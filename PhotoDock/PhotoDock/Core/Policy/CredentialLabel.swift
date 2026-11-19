@@ -16,6 +16,28 @@ struct CredentialLabel: Sendable, Equatable {
         self.display = display
         self.pattern = display.normalizedForLabelMatch()
     }
+
+    /// 行の中でこのラベルが現れるたびに、その**直後に続く元の文字列**を返す。
+    /// 照合は正規化した形で行うが、「ラベルの後ろに値があるか」は区切り記号や空白を
+    /// 見ないと判断できないので、正規化前の文字列に戻して返す。
+    func remainders(in text: String) -> [Substring] {
+        let normalized = text.labelMatchScalars()
+        let needle = Array(pattern.unicodeScalars)
+        guard !needle.isEmpty, normalized.count >= needle.count else { return [] }
+
+        var remainders: [Substring] = []
+
+        for start in 0...(normalized.count - needle.count) {
+            let window = normalized[start..<(start + needle.count)]
+            guard window.elementsEqual(needle, by: { $0.scalar == $1 }) else { continue }
+
+            // 一致した最後の文字の「元の文字列での次の位置」から後ろ
+            let end = normalized[start + needle.count - 1].sourceEnd
+            remainders.append(Substring(text.unicodeScalars[end...]))
+        }
+
+        return remainders
+    }
 }
 
 extension String {
@@ -28,17 +50,29 @@ extension String {
     /// - 空白と区切り記号を除去: `API_KEY` / `api-key` / `API キー` を同じ形に寄せる
     func normalizedForLabelMatch() -> String {
         var result = ""
+        result.unicodeScalars.append(contentsOf: labelMatchScalars().map(\.scalar))
+        return result
+    }
 
-        for scalar in lowercased().unicodeScalars {
-            // 全角英数・全角記号（U+FF01...U+FF5E）は半角に寄せる
-            let halfwidth = (0xFF01...0xFF5E).contains(scalar.value)
-                ? Unicode.Scalar(scalar.value - 0xFEE0) ?? scalar
-                : scalar
+    /// 正規化した文字と、それぞれが元の文字列のどこから来たか（元の文字の直後の位置）の対。
+    /// `normalizedForLabelMatch()` はこれを文字列に戻しただけなので、照合と位置の対応がズレない。
+    fileprivate func labelMatchScalars() -> [(scalar: Unicode.Scalar, sourceEnd: String.UnicodeScalarView.Index)] {
+        var result: [(scalar: Unicode.Scalar, sourceEnd: String.UnicodeScalarView.Index)] = []
 
-            guard !halfwidth.properties.isWhitespace,
-                  !Self.labelSeparators.contains(halfwidth) else { continue }
+        for index in unicodeScalars.indices {
+            let sourceEnd = unicodeScalars.index(after: index)
 
-            result.unicodeScalars.append(halfwidth)
+            for scalar in unicodeScalars[index].properties.lowercaseMapping.unicodeScalars {
+                // 全角英数・全角記号（U+FF01...U+FF5E）は半角に寄せる
+                let halfwidth = (0xFF01...0xFF5E).contains(scalar.value)
+                    ? Unicode.Scalar(scalar.value - 0xFEE0) ?? scalar
+                    : scalar
+
+                guard !halfwidth.properties.isWhitespace,
+                      !Self.labelSeparators.contains(halfwidth) else { continue }
+
+                result.append((halfwidth, sourceEnd))
+            }
         }
 
         return result
