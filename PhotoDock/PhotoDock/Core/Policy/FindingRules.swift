@@ -14,6 +14,13 @@ struct FindingRules: Sendable {
     /// 郵便物・申込書はほぼ書かない。必須にすると「渋谷区神南1-2-3」が落ちる）
     let municipalityMarkers: Set<Character>
 
+    /// 番地の数字1つの桁数（`1-2-3` の各部分）。丁目は1〜2桁、番地は多くて4桁
+    let addressBlockGroupDigits: ClosedRange<Int>
+
+    /// `1-2-3` の3つを合わせた桁数の上限。`1234-12-1203` で10桁。
+    /// これを超える並びは注文番号や通し番号（`1234-5678-9012`）のことが多い
+    let addressBlockMaxDigits: Int
+
     /// 認証情報のラベル語。順序 = 優先度。表示したい表記をそのまま書けばよい
     /// （照合用の正規化は `CredentialLabel` が導出する）。
     /// Set にしないこと: 反復順序がプロセスごとに変わるため、複数一致した行の
@@ -55,6 +62,8 @@ struct FindingRules: Sendable {
     static let standard = FindingRules(
         minimumConfidence: 0.5,
         municipalityMarkers: ["市", "区", "町", "村"],
+        addressBlockGroupDigits: 1...4,
+        addressBlockMaxDigits: 10,
         credentialLabels: [
             CredentialLabel("パスワード"),
             CredentialLabel("パスコード"),

@@ -262,16 +262,106 @@ struct FindingPolicy: Sendable {
             || text.contains(/-----BEGIN [A-Z ]*PRIVATE KEY-----/)          // PEM 秘密鍵
     }
 
-    /// 市区町村の文字 + 番地パターン。都道府県は要求しない（省略されるのが普通）。
-    /// `番` 単体を許さないのは `○○市 3番線` のような駅の表示を拾わないため。
-    /// 2連の `\d+-\d+` を番地とみなさないのは `8:30-17:15` のような時刻範囲に当たるため。
+    /// 市区町村の文字の**後ろに**番地が続く行を住所とみなす。都道府県は要求しない（省略されるのが普通）。
+    ///
+    /// 住所は「市区町村 → 町名 → 番地」の順に書くので、番地より前に市区町村の文字が無ければ
+    /// 住所ではない。行を先頭から1回なぞり、市区町村の文字を見た後に出てきた数字の並びだけを
+    /// 番地の候補にする。
     private func hasAddress(_ text: String) -> Bool {
-        let hasMunicipality = text.contains { rules.municipalityMarkers.contains($0) }
-        let hasBlockNumber = text.contains(/[0-9]+-[0-9]+-[0-9]+/)
-            || text.contains(/[0-9]+丁目/)
-            || text.contains(/[0-9]+番地/)
+        let characters = Array(text)
+        var index = 0
+        var hasSeenMunicipality = false
 
-        return hasMunicipality && hasBlockNumber
+        while index < characters.count {
+            guard Self.isASCIIDigit(characters[index]) else {
+                if rules.municipalityMarkers.contains(characters[index]) { hasSeenMunicipality = true }
+                index += 1
+                continue
+            }
+
+            // ハイフンでつながった数字の並びを1つ読む（`1-2-3` → ["1", "2", "3"]）
+            let start = index
+            var groups = [""]
+
+            while index < characters.count {
+                if Self.isASCIIDigit(characters[index]) {
+                    groups[groups.count - 1].append(characters[index])
+                } else if characters[index] == "-",
+                          index + 1 < characters.count,
+                          Self.isASCIIDigit(characters[index + 1]) {
+                    groups.append("")
+                } else {
+                    break
+                }
+                index += 1
+            }
+
+            let isBlock = isBlockNumber(
+                groups,
+                precededBy: start > 0 ? characters[start - 1] : nil,
+                followedBy: characters[index...].prefix(2)
+            )
+            if hasSeenMunicipality, isBlock { return true }
+        }
+
+        return false
+    }
+
+    /// 数字の並びが番地の書き方か。
+    ///
+    /// - 漢字の書き方: `1丁目` / `4番地` / `1番2号`。`番` 単体を許さないのは
+    ///   `○○市 3番線` のような駅の表示を拾わないため
+    /// - `1-2-3`（部屋番号つきの `1-2-3-405` も）: 日付（`2026-09-12`）と電話番号（`03-1234-5678`）、
+    ///   桁の多い通し番号（`1234-5678-9012`）を除く
+    /// - `4-5`: 町名に直接続くときだけ（`万町4-5`）。空白や記号の後ろの2連は
+    ///   時刻の範囲（`8:30-17:15`）や点数（`3-2`）のことが多い
+    private func isBlockNumber(
+        _ groups: [String],
+        precededBy previous: Character?,
+        followedBy following: ArraySlice<Character>
+    ) -> Bool {
+        let next = following.first
+
+        if following.elementsEqual("丁目") || following.elementsEqual("番地") { return true }
+        if next == "番", let afterNext = following.dropFirst().first, Self.isASCIIDigit(afterNext) { return true }
+
+        // 番地の数字は 0 で始まらない。0 始まりの並びは日付の月日か電話番号
+        guard groups.allSatisfy({ rules.addressBlockGroupDigits.contains($0.count) && !$0.hasPrefix("0") }) else {
+            return false
+        }
+
+        switch groups.count {
+        case 3, 4:
+            let block = groups.prefix(3)
+            let digitCount = block.reduce(0) { $0 + $1.count }
+
+            return digitCount <= rules.addressBlockMaxDigits && !isDate(Array(block))
+        case 2:
+            return previous.map(Self.isJapaneseLetter) ?? false && next != ":"
+        default:
+            return false
+        }
+    }
+
+    /// 0 埋めの無い日付（`2026-9-12`）。0 埋めのある日付は「0 で始まらない」の条件で先に落ちる
+    private func isDate(_ groups: [String]) -> Bool {
+        guard groups.count == 3, groups[0].count == 4,
+              let year = Int(groups[0]), let month = Int(groups[1]), let day = Int(groups[2]) else {
+            return false
+        }
+
+        return (1900...2100).contains(year) && (1...12).contains(month) && (1...31).contains(day)
+    }
+
+    private static func isASCIIDigit(_ character: Character) -> Bool {
+        character.isASCII && character.isNumber
+    }
+
+    /// 漢字・ひらがな・カタカナ（町名に使われる文字）
+    private static func isJapaneseLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy {
+            (0x3040...0x30FF).contains($0.value) || (0x4E00...0x9FFF).contains($0.value) || $0 == "々"
+        }
     }
 
     private func hasPhoneNumber(_ text: String) -> Bool {
