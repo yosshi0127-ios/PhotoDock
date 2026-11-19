@@ -80,7 +80,7 @@ struct FindingPolicy: Sendable {
     /// - `03-1234-5678` は電話番号。部分文字列が郵便番号の書式にも当たるが、電話が先に勝つ
     /// - `〒150-0041 渋谷区神南1-2-3` は住所。郵便番号より情報量が多いほうを取る
     func classify(_ text: String) -> (kind: FindingKind, severity: Severity)? {
-        if hasCardNumber(text) { return (.cardNumber, .danger) }
+        if let severity = cardNumberSeverity(in: text) { return (.cardNumber, severity) }
         // 値の書式はラベルより確実なので先に試す
         if hasCredentialValue(text) { return (.credential, .danger) }
         if let severity = credentialLabelSeverity(in: text) { return (.credential, severity) }
@@ -93,20 +93,77 @@ struct FindingPolicy: Sendable {
         return nil
     }
 
-    private func hasCardNumber(_ text: String) -> Bool {
-        digitRuns(in: text).contains {
-            rules.cardNumberDigits.contains($0.count) && isLuhnValid($0)
+    /// カード番号が写っている行の危険度。無ければ nil。
+    ///
+    /// 数字のかたまりを区切りごとに保ったまま、**連続するかたまりの組**を候補にする。
+    /// 行全体の数字を1本につなげると、隣の数字を巻き込んで見逃す
+    /// （`4111 1111 1111 1111 12/28` が18桁になって Luhn に落ちる）。
+    /// - Luhn が通り、番号帯と桁数がブランドに合う → **危険**
+    /// - Luhn が通り、ブランドには合わないが4桁×4で書かれている → **要注意**
+    private func cardNumberSeverity(in text: String) -> Severity? {
+        var severity: Severity?
+
+        for groups in digitClusters(in: text) {
+            for start in groups.indices {
+                var digits = ""
+
+                for end in start..<groups.count {
+                    digits += groups[end]
+                    guard digits.count <= rules.cardNumberDigits.upperBound else { break }
+                    guard rules.cardNumberDigits.contains(digits.count), isLuhnValid(digits) else { continue }
+
+                    if rules.cardNumberFormats.contains(where: { $0.matches(digits) }) {
+                        return .danger
+                    }
+                    if groups[start...end].map(\.count) == rules.unbrandedCardGrouping {
+                        severity = .caution
+                    }
+                }
+            }
         }
+
+        return severity
     }
 
-    /// 空白とハイフンを除いてから、連続する数字の並びを取り出す
+    /// 数字のかたまりを、近くにあるもの同士でまとめて取り出す（数字は半角に寄せる）。
+    /// `4111 1111 1111 1111 12/28` → `[["4111", "1111", "1111", "1111", "12"], ["28"]]`。
+    /// かたまり同士をつなぐのは空白とハイフンだけ（合わせて3文字まで。` - ` を許すため）。
+    /// それ以外の文字や長い空きを挟んだ数字は別のまとまりにする
     /// （Vision は `4111 1111 1111 1111` と区切り込みで返す — 実測済み）
-    private func digitRuns(in text: String) -> [String] {
-        text
-            .filter { !$0.isWhitespace && $0 != "-" }
-            .split { !Self.isMaskableDigit($0) }
-            .map(String.init)
+    private func digitClusters(in text: String) -> [[String]] {
+        var clusters: [[String]] = []
+        var groups: [String] = []
+        var group = ""
+        var gap = 0
+
+        func closeCluster() {
+            if !group.isEmpty { groups.append(group) }
+            if !groups.isEmpty { clusters.append(groups) }
+            groups = []
+            group = ""
+        }
+
+        for character in text {
+            if Self.isMaskableDigit(character), let value = character.wholeNumberValue {
+                if gap > 0, !group.isEmpty {
+                    groups.append(group)
+                    group = ""
+                }
+                group += String(value)
+                gap = 0
+            } else if character == " " || character == "-", gap < Self.maxClusterGap {
+                gap += 1
+            } else {
+                closeCluster()
+                gap = 0
+            }
+        }
+        closeCluster()
+
+        return clusters
     }
+
+    private static let maxClusterGap = 3
 
     private func isLuhnValid(_ digits: String) -> Bool {
         var sum = 0

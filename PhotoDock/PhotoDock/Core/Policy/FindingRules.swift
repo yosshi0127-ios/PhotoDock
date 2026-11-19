@@ -30,6 +30,15 @@ struct FindingRules: Sendable {
     /// Luhn を適用する桁数の範囲（区切り記号を除去した後）
     let cardNumberDigits: ClosedRange<Int>
 
+    /// カードブランドの番号帯と桁数。Luhn が通り、かつこのどれかに合えば「危険」（断定してよい）。
+    /// Visa の13桁は載せない: 発行されなくなって久しく、載せると 45 / 49 で始まる
+    /// 13桁の JAN コード（日本の商品バーコードの数字）の1割が偶然カード番号になる
+    let cardNumberFormats: [CardNumberFormat]
+
+    /// 番号帯がどのブランドにも合わないとき、この区切り方で書かれていて Luhn が通れば「要注意」。
+    /// 表に無いブランドのカードを見逃さないための受け皿（書式の一致だけなので断定しない）
+    let unbrandedCardGrouping: [Int]
+
     /// マスクで末尾に残す桁数
     let maskedTrailingDigits: Int
 
@@ -63,6 +72,16 @@ struct FindingRules: Sendable {
         ],
         credentialValueMinLength: 4,
         cardNumberDigits: 13...19,
+        cardNumberFormats: [
+            CardNumberFormat(prefixes: [4...4], lengths: [16, 19]),                           // Visa
+            CardNumberFormat(prefixes: [51...55, 2221...2720], lengths: [16]),                // Mastercard
+            CardNumberFormat(prefixes: [34...34, 37...37], lengths: [15]),                    // American Express
+            CardNumberFormat(prefixes: [300...305, 36...36, 38...39], lengths: [14]),         // Diners Club
+            CardNumberFormat(prefixes: [3528...3589], lengths: [16]),                         // JCB
+            CardNumberFormat(prefixes: [6011...6011, 644...649, 65...65], lengths: [16]),     // Discover
+            CardNumberFormat(prefixes: [62...62], lengths: [16, 17, 18, 19])                  // 銀聯
+        ],
+        unbrandedCardGrouping: [4, 4, 4, 4],
         maskedTrailingDigits: 4,
         bystanderFaceMaxArea: 0.02,
         bystanderFaceEdgeMargin: 0.10,

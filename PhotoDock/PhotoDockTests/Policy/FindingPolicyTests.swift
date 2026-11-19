@@ -34,7 +34,7 @@ struct FindingPolicyTests {
 
     @Test("桁数が範囲外ならカード番号にしない", arguments: [
         "4111 1111 1111",          // 12桁（13未満）
-        "4111 1111 1111 1111 111"  // 19桁を超える
+        "41111111111111111234"     // 区切りの無い20桁。先頭16桁は有効だが、切り出す根拠が無い
     ])
     func cardNumberDigitCount(_ text: String) {
         #expect(kind(of: text) != .cardNumber)
@@ -43,6 +43,94 @@ struct FindingPolicyTests {
     @Test("ハイフン区切りのカード番号も拾う")
     func cardNumberWithHyphens() {
         #expect(kind(of: "4111-1111-1111-1111") == .cardNumber)
+    }
+
+    /// 各ブランドの公開されているテスト番号。番号帯・桁数・Luhn がすべて合う
+    @Test("主要ブランドの番号は区切り方によらず危険", arguments: [
+        "4242 4242 4242 4242",      // Visa
+        "4012888888881881",         // Visa（区切りなし）
+        "5555 5555 5555 4444",      // Mastercard
+        "5105-1051-0510-5100",      // Mastercard
+        "2223 0031 2200 3222",      // Mastercard（2 で始まる番号帯）
+        "3782 822463 10005",        // American Express（4-6-5）
+        "371449635398431",          // American Express
+        "3056 930902 5904",         // Diners Club（4-6-4）
+        "3622 720627 1667",         // Diners Club
+        "3530 1113 3330 0000",      // JCB
+        "3566 0020 2036 0505",      // JCB
+        "6011 1111 1111 1117",      // Discover
+        "6200 0000 0000 0005",      // 銀聯
+        "４１１１ １１１１ １１１１ １１１１",  // 全角数字
+        "4111 - 1111 - 1111 - 1111" // 空白つきのハイフン
+    ])
+    func cardBrands(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .danger)
+    }
+
+    /// 行全体の数字を1本につなげると、隣の数字を巻き込んで Luhn に落ちる
+    @Test("カード番号の隣に別の数字があっても拾う", arguments: [
+        "4111 1111 1111 1111 12/28",                       // 有効期限
+        "4111 1111 1111 1111 123",                         // セキュリティコード
+        "カード番号 4111 1111 1111 1111 有効期限 12/28",
+        "No. 4111111111111111",
+        "2026-09-12 4111 1111 1111 1111",                  // 前に日付
+        "1 4111 1111 1111 1111"                            // 前に行番号
+    ])
+    func cardNumberNextToOtherDigits(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .danger)
+    }
+
+    /// どれも Luhn は通る。番号帯か桁数がブランドの割り当てに合わない
+    @Test("Luhn が通ってもブランドの番号の形でなければカード番号にしない", arguments: [
+        "4901234567894",        // 13桁・JAN コードの形（日本の商品バーコードは 45 / 49 で始まる）
+        "411111111111116",      // Visa の番号帯だが15桁
+        "3782822463100003",     // American Express の番号帯だが16桁
+        "9123456789012348",     // どのブランドでもない16桁（区切りなし）
+        "5600000000000003"      // Mastercard の番号帯（51〜55）の外
+    ])
+    func luhnAloneIsNotEnough(_ text: String) {
+        #expect(kind(of: text) != .cardNumber)
+    }
+
+    /// 表に無いブランドのカードを見逃さないための受け皿。書式の一致だけなので断定しない
+    @Test("ブランド不明でも4桁×4で書かれて Luhn が通れば要注意")
+    func unbrandedCardShapedNumber() {
+        let match = sut.classify("1234 5678 1234 5670")
+
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .caution)
+
+        // 同じ番号でも区切りが無ければ、カードらしさの根拠が Luhn しか無い
+        #expect(kind(of: "1234567812345670") != .cardNumber)
+    }
+
+    /// 文字や長い空きを挟んだ数字はつなげない（表の別の列・別の項目）
+    @Test("離れた数字をつなげてカード番号にしない", arguments: [
+        "4111 1111 / 1111 1111",
+        "4111 1111     1111 1111",
+        "4111 1111 円 1111 1111"
+    ])
+    func distantDigitsAreNotJoined(_ text: String) {
+        #expect(kind(of: text) != .cardNumber)
+    }
+
+    @Test("ブランドの番号帯と桁数の照合", arguments: [
+        ("4111111111111111", true),
+        ("2221000000000000", true),     // Mastercard の番号帯の下端
+        ("2720990000000000", true),     // 上端
+        ("2220990000000000", false),    // 下端の外
+        ("2721000000000000", false)     // 上端の外
+    ])
+    func cardNumberFormatRanges(_ digits: String, _ expected: Bool) {
+        let matched = FindingRules.standard.cardNumberFormats.contains { $0.matches(digits) }
+
+        #expect(matched == expected)
     }
 
     // MARK: - 認証情報
@@ -453,6 +541,8 @@ struct FindingPolicyTests {
                 credentialLabels: FindingRules.standard.credentialLabels,
                 credentialValueMinLength: FindingRules.standard.credentialValueMinLength,
                 cardNumberDigits: FindingRules.standard.cardNumberDigits,
+                cardNumberFormats: FindingRules.standard.cardNumberFormats,
+                unbrandedCardGrouping: FindingRules.standard.unbrandedCardGrouping,
                 maskedTrailingDigits: FindingRules.standard.maskedTrailingDigits,
                 bystanderFaceMaxArea: FindingRules.standard.bystanderFaceMaxArea,
                 bystanderFaceEdgeMargin: FindingRules.standard.bystanderFaceEdgeMargin,
