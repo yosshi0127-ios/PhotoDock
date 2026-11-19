@@ -652,10 +652,21 @@ struct FindingPolicyTests {
 
     // MARK: - findings（入口）
 
-    @Test("確度が閾値未満の行は誤読として捨てる")
+    /// Vision の確度は 0.3 / 0.5 / 1.0 の3段階で、0.3 にも正しい読みが混ざる。
+    /// 値は Vision が返す Float をそのまま Double にしたもの（0.30000001192092896）
+    @Test("Vision が返す最低の確度（0.3）の行も判定する", arguments: [
+        Double(Float(0.3)), 0.3, 0.5, 1
+    ])
+    func lowestVisionConfidenceIsClassified(_ confidence: Double) {
+        let texts = [RecognizedText(text: "4111 1111 1111 1111", confidence: confidence, region: .test)]
+
+        #expect(sut.findings(in: texts).map(\.kind) == [.cardNumber])
+    }
+
+    @Test("確度が閾値未満の行は使わない")
     func lowConfidenceIsDropped() {
         let texts = [
-            RecognizedText(text: "4111 1111 1111 1111", confidence: 0.4, region: .test),
+            RecognizedText(text: "4111 1111 1111 1111", confidence: 0.2, region: .test),
             RecognizedText(text: "090-1234-5678", confidence: 0.9, region: .test)
         ]
 

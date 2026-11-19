@@ -17,7 +17,7 @@ struct FindingPolicy: Sendable {
     }
 
     /// 1枚ぶんの認識結果と検出した顔を所見に変換する。
-    /// 確度の低い行は誤読として捨て、1行につき最大1件の所見を作る。
+    /// 確度が閾値未満の行は使わず、1行につき最大1件の所見を作る。
     /// 顔は「写り込みらしい」ものだけを所見にする（撮りたかった人の顔は所見にしない）。
     func findings(in texts: [RecognizedText], faces: [DetectedFace] = []) -> [Finding] {
         let fromTexts = texts
