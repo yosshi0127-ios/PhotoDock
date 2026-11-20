@@ -15,6 +15,11 @@ import Testing
 struct ScanLibraryPhotosUseCaseTests {
     private let generation = ProcessInfo.processInfo.operatingSystemVersionString
 
+    /// 「途中でやめる」テストで使う枚数。2並列・1枚 20ms で全部終えるのに約1分かかる量にする。
+    /// 少ないと（20枚なら 0.1 秒）、テスト側が一瞬止まっただけで、やめる前に診断が全部終わってしまい、
+    /// 「途中でやめた」ではなく「最後まで終わった」結果になる（CI の遅いランナーで実際に落ちた）
+    private static let moreThanCanFinish = 6_000
+
     private func assets(_ count: Int) -> [AssetMetadata] {
         (0..<count).map { .stub(id: "asset-\($0)") }
     }
@@ -117,7 +122,7 @@ struct ScanLibraryPhotosUseCaseTests {
 
     /// 消費側がやめても裏で走り続けると、画面を閉じた後も3万枚を処理してしまう
     @Test("途中でやめたら残りはスキャンされない")
-    func cancellationStopsScanning() async throws {
+    func cancellationStopsScanning() async {
         let probe = ConcurrencyProbePixelSourceService(delay: .milliseconds(20))
 
         await withDependencies {
@@ -131,21 +136,20 @@ struct ScanLibraryPhotosUseCaseTests {
             let useCase = ScanLibraryPhotosUseCase()
 
             var count = 0
-            for await _ in useCase(assets: assets(200), quality: .quick, concurrency: 2) {
+            for await _ in useCase(assets: assets(Self.moreThanCanFinish), quality: .quick, concurrency: 2) {
                 count += 1
                 if count == 5 { break }
             }
         }
 
-        // 何枚目で止まるかはタイミング次第なので、件数ではなく「止まったこと」を見る
-        try await Task.sleep(for: .milliseconds(200))
-        let afterLeaving = await probe.callCount
-        try await Task.sleep(for: .milliseconds(200))
-        let later = await probe.callCount
+        // 何枚目で止まるかはタイミング次第なので、件数ではなく「止まったこと」を見る。
+        // 増えなくなるまで待つ（固定の時間だけ待つと、遅い環境で走りかけの分を数え損ねる）。
+        // 止まらない実装なら増え続けるので、落ち着かないまま下の2つ目の確認で落ちる
+        let settled = await Eventually.settledValue { await probe.callCount }
 
-        #expect(afterLeaving < 200)
-        // 待っても増えない = 完全に止まっている
-        #expect(afterLeaving == later)
+        #expect(settled < Self.moreThanCanFinish)
+        // 落ち着いた後は増えない = 完全に止まっている
+        #expect(await probe.callCount == settled)
     }
 
     // MARK: - 記録による短縮
@@ -370,7 +374,7 @@ struct ScanLibraryPhotosUseCaseTests {
 
     /// ユーザーが Live Activity から中止したら、それ以上診断を積まない。打ち切りは失敗として閉じる
     @Test("OS に打ち切られたら残りは診断されず、失敗で閉じる")
-    func expirationStopsScanning() async throws {
+    func expirationStopsScanning() async {
         let probe = ConcurrencyProbePixelSourceService()
         let spy = SpyContinuedProcessingService(expiresAfterReports: 3)
 
@@ -380,20 +384,19 @@ struct ScanLibraryPhotosUseCaseTests {
         #expect(records.count == 3)
         #expect(await spy.ended == [false])
 
-        // 待っても増えない = 完全に止まっている
-        let afterStop = await probe.callCount
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(afterStop < 50)
-        #expect(await probe.callCount == afterStop)
+        // 増えなくなるまで待つ。止まらない実装なら 50 枚まで増え切るので、下の上限で落ちる
+        let settled = await Eventually.settledValue { await probe.callCount }
+        #expect(settled < 50)
+        #expect(await probe.callCount == settled)
     }
 
     /// 画面を離れて止めたときも、OS に「終わった」と伝えないと Live Activity が残る
     @Test("消費側が途中でやめたら失敗で閉じる")
-    func consumerLeavingEndsWithFailure() async throws {
+    func consumerLeavingEndsWithFailure() async {
         let spy = SpyContinuedProcessingService()
 
         await withDependencies {
-            $0.pixelSource = ConcurrencyProbePixelSourceService()
+            $0.pixelSource = ConcurrencyProbePixelSourceService(delay: .milliseconds(20))
             $0.ocr = SpyOCRService()
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = SpyScanRecordRepository()
@@ -403,14 +406,15 @@ struct ScanLibraryPhotosUseCaseTests {
             let useCase = ScanLibraryPhotosUseCase()
 
             var count = 0
-            for await _ in useCase(assets: assets(20), quality: .quick, concurrency: 2) {
+            // やめる前に全部終わると end(true) になり、確かめたい経路を通らない。終わり切らない枚数にする
+            for await _ in useCase(assets: assets(Self.moreThanCanFinish), quality: .quick, concurrency: 2) {
                 count += 1
                 if count == 3 { break }
             }
         }
 
-        // 離脱後の end は走っていた分が終わってから届くので、少し待つ
-        try await Task.sleep(for: .milliseconds(200))
+        // 離脱後の end は走っていた分が終わってから届く。固定の時間ではなく、届くまで待つ
+        _ = await Eventually.holds { await spy.ended.isEmpty == false }
         #expect(await spy.ended == [false])
     }
 }
