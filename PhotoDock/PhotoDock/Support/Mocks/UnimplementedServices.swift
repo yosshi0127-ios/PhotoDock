@@ -33,7 +33,7 @@ struct UnimplementedPixelSourceService: PixelSourceService {
 }
 
 struct UnimplementedOCRService: OCRService {
-    func recognizeText(in data: Data, maxPixelSize: Int) async -> [RecognizedText] {
+    func recognizeText(in data: Data, maxPixelSize: Int) async -> OCROutcome {
         fatalError("UnimplementedOCRService.recognizeText(in:maxPixelSize:) が呼ばれた（テストで上書きすること）")
     }
 }

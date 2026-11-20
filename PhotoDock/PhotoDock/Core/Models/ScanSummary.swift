@@ -15,6 +15,9 @@ struct ScanSummary: Sendable, Equatable {
     var unavailableInCloud: Int = 0
     /// 写真が見つからなかった枚数
     var missing: Int
+    /// 画像は取れたが、文字を読む処理が失敗した枚数。所見の有無は分からない。
+    /// 既定値を持つ理由は `unavailableInCloud` と同じ
+    var failed: Int = 0
     /// 危険な所見を含む写真の枚数
     var dangerPhotos: Int
     /// 要注意どまりの所見を含む写真の枚数。danger と混在する写真は danger にだけ数える
@@ -29,7 +32,7 @@ struct ScanSummary: Sendable, Equatable {
     )
 
     /// 処理が終わった枚数。進捗の分子になる
-    var completed: Int { scanned + notAvailableLocally + unavailableInCloud + missing }
+    var completed: Int { scanned + notAvailableLocally + unavailableInCloud + missing + failed }
 
     /// 所見が1件でもあった写真の枚数
     var flaggedPhotos: Int { dangerPhotos + cautionPhotos }

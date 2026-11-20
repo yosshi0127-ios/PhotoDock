@@ -11,8 +11,8 @@ import Foundation
 /// Preview が数分固まる。正しさはテストで担保し、Preview は速さを取る。
 /// 画像の中身は見ないので、**Preview ではすべての写真に同じ所見が出る**（枚数の見た目は不自然になる）。
 struct StubOCRService: OCRService {
-    func recognizeText(in data: Data, maxPixelSize: Int) async -> [RecognizedText] {
-        Self.fixedResults
+    func recognizeText(in data: Data, maxPixelSize: Int) async -> OCROutcome {
+        .recognized(Self.fixedResults)
     }
 
     /// 位置は `StubPixelSourceService` が文字を描く座標に合わせてある

@@ -17,19 +17,22 @@ struct FindingPolicy: Sendable {
     }
 
     /// 1枚ぶんの認識結果と検出した顔を所見に変換する。
-    /// 確度の低い行は誤読として捨て、1行につき最大1件の所見を作る。
+    /// 確度が閾値未満の行は使わず、1行につき最大1件の所見を作る。
     /// 顔は「写り込みらしい」ものだけを所見にする（撮りたかった人の顔は所見にしない）。
     func findings(in texts: [RecognizedText], faces: [DetectedFace] = []) -> [Finding] {
         let fromTexts = texts
             .filter { $0.confidence >= rules.minimumConfidence }
             .compactMap { recognized -> Finding? in
-                guard let match = classify(recognized.text) else { return nil }
+                // 判定とマスクは同じ正規化済みの行を見る（全角のメールアドレスを
+                // 判定では拾えたのにマスクでは見つけられない、という食い違いを作らない）
+                let line = recognized.text.normalizedForMatching()
+                guard let match = classify(normalized: line) else { return nil }
 
                 return Finding(
                     kind: match.kind,
                     severity: match.severity,
                     region: recognized.region,
-                    maskedText: masked(recognized.text, as: match.kind)
+                    maskedText: masked(line, as: match.kind)
                 )
             }
 
@@ -79,34 +82,148 @@ struct FindingPolicy: Sendable {
     /// - `パスワード: 090-1234-5678` は認証情報として拾う（ラベル語があれば意図が明確）
     /// - `03-1234-5678` は電話番号。部分文字列が郵便番号の書式にも当たるが、電話が先に勝つ
     /// - `〒150-0041 渋谷区神南1-2-3` は住所。郵便番号より情報量が多いほうを取る
+    ///
+    /// 入口で全角の英数記号とハイフンの異体を半角に寄せる（`normalizedForMatching`）。
+    /// 以降の判定は半角の数字と `-` だけを相手にする。
     func classify(_ text: String) -> (kind: FindingKind, severity: Severity)? {
-        if hasCardNumber(text) { return (.cardNumber, .danger) }
+        classify(normalized: text.normalizedForMatching())
+    }
+
+    private func classify(normalized text: String) -> (kind: FindingKind, severity: Severity)? {
+        if let severity = cardNumberSeverity(in: text) { return (.cardNumber, severity) }
         // 値の書式はラベルより確実なので先に試す
         if hasCredentialValue(text) { return (.credential, .danger) }
-        if hasCredentialLabel(text) { return (.credential, .danger) }
-        if text.contains(/\b[A-Z]{2}[0-9]{7}\b/) { return (.identityDocumentNumber, .caution) }
+        if let severity = credentialLabelSeverity(in: text) { return (.credential, severity) }
+        if identityDocumentNumberRange(in: text) != nil { return (.identityDocumentNumber, .caution) }
         if text.contains(emailPattern) { return (.email, .caution) }
         if hasAddress(text) { return (.address, .caution) }
-        if hasPhoneNumber(text) { return (.phoneNumber, .caution) }
-        if text.contains(/[0-9]{3}-[0-9]{4}/) { return (.postalCode, .caution) }
+        if phoneNumberRange(in: text) != nil { return (.phoneNumber, .caution) }
+        if hasPostalCode(text) { return (.postalCode, .caution) }
 
         return nil
     }
 
-    private func hasCardNumber(_ text: String) -> Bool {
-        digitRuns(in: text).contains {
-            rules.cardNumberDigits.contains($0.count) && isLuhnValid($0)
-        }
+    /// カード番号が写っている行の危険度。無ければ nil。
+    private func cardNumberSeverity(in text: String) -> Severity? {
+        cardNumberMatch(in: text)?.severity
     }
 
-    /// 空白とハイフンを除いてから、連続する数字の並びを取り出す
-    /// （Vision は `4111 1111 1111 1111` と区切り込みで返す — 実測済み）
-    private func digitRuns(in text: String) -> [String] {
-        text
-            .filter { !$0.isWhitespace && $0 != "-" }
-            .split { !Self.isMaskableDigit($0) }
-            .map(String.init)
+    /// 行の中のカード番号と、その数字が行の何文字目にあるか。無ければ nil。
+    /// 位置はマスクで使う（番号そのものの末尾だけを残すため）。
+    ///
+    /// 数字のかたまりを区切りごとに保ったまま、**連続するかたまりの組**を候補にする。
+    /// 行全体の数字を1本につなげると、隣の数字を巻き込んで見逃す
+    /// （`4111 1111 1111 1111 12/28` が18桁になって Luhn に落ちる）。
+    /// - Luhn が通り、番号帯と桁数がブランドに合う → **危険**
+    /// - Luhn が通り、ブランドには合わないが4桁×4で書かれている → **要注意**
+    ///
+    /// 危険が1つでもあればそれを返す。無ければ最初に見つかった要注意を返す。
+    private func cardNumberMatch(in text: String) -> (severity: Severity, digitOffsets: [Int])? {
+        var unbranded: [Int]?
+
+        for groups in digitClusters(in: text) {
+            for start in groups.indices {
+                var digits = ""
+
+                for end in start..<groups.count {
+                    digits += groups[end].digits
+                    guard digits.count <= rules.cardNumberDigits.upperBound else { break }
+                    guard rules.cardNumberDigits.contains(digits.count), isLuhnValid(digits) else { continue }
+
+                    let candidate = groups[start...end]
+
+                    if rules.cardNumberFormats.contains(where: { $0.matches(digits) }) {
+                        return (.danger, candidate.flatMap(\.offsets))
+                    }
+                    if unbranded == nil, candidate.map(\.digits.count) == rules.unbrandedCardGrouping {
+                        unbranded = candidate.flatMap(\.offsets)
+                    }
+                }
+            }
+        }
+
+        return unbranded.map { (.caution, $0) }
     }
+
+    /// 区切られずに並んだ数字のかたまり。`offsets` は各数字が行の何文字目にあるか
+    private struct DigitGroup {
+        var digits = ""
+        var offsets: [Int] = []
+    }
+
+    /// 数字のかたまりを、近くにあるもの同士でまとめて取り出す（数字は半角に寄せる）。
+    /// `4111 1111 1111 1111 12/28` → `[["4111", "1111", "1111", "1111", "12"], ["28"]]`。
+    /// かたまり同士をつなぐのは空白とハイフンだけ（合わせて3文字まで。` - ` を許すため）。
+    /// それ以外の文字や長い空きを挟んだ数字は別のまとまりにする
+    /// （Vision は `4111 1111 1111 1111` と区切り込みで返す — 実測済み）
+    private func digitClusters(in text: String) -> [[DigitGroup]] {
+        var clusters: [[DigitGroup]] = []
+        var groups: [DigitGroup] = []
+        var group = DigitGroup()
+        var gap = 0
+
+        func closeCluster() {
+            if !group.digits.isEmpty { groups.append(group) }
+            if !groups.isEmpty { clusters.append(groups) }
+            groups = []
+            group = DigitGroup()
+        }
+
+        let characters = Array(text)
+
+        for (offset, character) in characters.enumerated() {
+            if Self.isMaskableDigit(character), let value = character.wholeNumberValue {
+                if gap > 0, !group.digits.isEmpty {
+                    groups.append(group)
+                    group = DigitGroup()
+                }
+                group.digits += String(value)
+                group.offsets.append(offset)
+                gap = 0
+            } else if character == " " || character == "-", gap < Self.maxClusterGap {
+                gap += 1
+            } else {
+                // OCR が番号と有効期限の間の空白を落とすことがある（`...444408/27`）。
+                // 期限の形が続くときは、末尾の「月」を別のかたまりに分けてから閉じる
+                if character == "/", gap == 0, endsWithExpiryMonth(group, before: characters[(offset + 1)...]) {
+                    let monthStart = group.digits.count - Self.expiryMonthDigits
+
+                    groups.append(DigitGroup(
+                        digits: String(group.digits.prefix(monthStart)),
+                        offsets: Array(group.offsets.prefix(monthStart))
+                    ))
+                    group = DigitGroup(
+                        digits: String(group.digits.suffix(Self.expiryMonthDigits)),
+                        offsets: Array(group.offsets.suffix(Self.expiryMonthDigits))
+                    )
+                }
+                closeCluster()
+                gap = 0
+            }
+        }
+        closeCluster()
+
+        return clusters
+    }
+
+    /// 数字のかたまりの末尾2桁が、有効期限（`MM/YY` / `MM/YYYY`）の「月」か。
+    ///
+    /// かたまりが `/` の直前にあり、末尾2桁が 01〜12 で、`/` の後ろに数字がちょうど2桁か4桁続くとき。
+    /// 2桁だけのかたまり（`12/28` の `12`）はもともと独立しているので対象にしない。
+    /// ここで分けるのは候補を作るためで、カード番号かどうかは Luhn とブランドの形が決める
+    private func endsWithExpiryMonth(_ group: DigitGroup, before following: ArraySlice<Character>) -> Bool {
+        guard group.digits.count > Self.expiryMonthDigits,
+              let month = Int(group.digits.suffix(Self.expiryMonthDigits)),
+              (1...12).contains(month) else { return false }
+
+        let yearDigits = following.prefix(while: Self.isMaskableDigit).count
+
+        return yearDigits == 2 || yearDigits == 4
+    }
+
+    private static let expiryMonthDigits = 2
+
+    private static let maxClusterGap = 3
 
     private func isLuhnValid(_ digits: String) -> Bool {
         var sum = 0
@@ -125,9 +242,47 @@ struct FindingPolicy: Sendable {
         return sum.isMultiple(of: 10)
     }
 
-    private func hasCredentialLabel(_ text: String) -> Bool {
-        matchedCredentialLabel(in: text) != nil
+    /// ラベル語がある行の危険度。ラベルが無ければ nil。
+    ///
+    /// ラベル語があるだけでは「値が写っている」とは言えない。ログイン画面の
+    /// 「パスワードを忘れた方」や設定画面の「パスワードを変更」にもラベル語は出る。
+    /// - ラベルの直後に値らしい文字列が続く → **危険**（`パスワード: hunter2`）
+    /// - ラベルだけ → **要注意**（値が次の行にある付箋やルーターのラベルを落とさないため、所見には残す）
+    ///
+    /// 同じ行にラベルが複数回出るときは、どれか1つに値が続けば危険とする。
+    private func credentialLabelSeverity(in text: String) -> Severity? {
+        let remainders = rules.credentialLabels.flatMap { $0.remainders(in: text) }
+        guard !remainders.isEmpty else { return nil }
+
+        return remainders.contains(where: startsWithCredentialValue) ? .danger : .caution
     }
+
+    /// ラベルの直後（空白と区切り記号を飛ばした位置）に、値らしい文字列があるか。
+    ///
+    /// 値は「空白を含まない半角の英数記号の並び」とみなす（全角は入口の正規化で半角に寄っている）。
+    /// - `:` や `=` で区切られていれば、その並びをそのまま値とみなす（`Password: correcthorse`）
+    /// - 区切りが無いときは数字を含む並びだけを値とみなす。英語の UI 文言
+    ///   （`Password reset` / `Password must be ...`）を値と取り違えないため
+    /// - 伏せ字（`********`）のように英数字を1つも含まない並びは値ではない
+    ///
+    /// 取りこぼしても所見は要注意として残る（危険に上がらないだけで、消えはしない）。
+    private func startsWithCredentialValue(_ remainder: Substring) -> Bool {
+        var rest = remainder.drop(while: \.isWhitespace)
+
+        let hasSeparator = rest.first.map { Self.credentialValueSeparators.contains($0) } ?? false
+        if hasSeparator {
+            rest = rest.dropFirst().drop(while: \.isWhitespace)
+        }
+
+        let token = rest.prefix { $0.isASCII && !$0.isWhitespace }
+
+        guard token.count >= rules.credentialValueMinLength,
+              token.contains(where: { $0.isLetter || $0.isNumber }) else { return false }
+
+        return hasSeparator || token.contains(where: \.isNumber)
+    }
+
+    private static let credentialValueSeparators: Set<Character> = [":", "="]
 
     /// 入力にもラベルと同じ正規化を通してから照合する
     /// （`API_KEY` / `api-key` / `API キー` がどれも `apikey` に寄る）
@@ -149,21 +304,144 @@ struct FindingPolicy: Sendable {
             || text.contains(/-----BEGIN [A-Z ]*PRIVATE KEY-----/)          // PEM 秘密鍵
     }
 
-    /// 市区町村の文字 + 番地パターン。都道府県は要求しない（省略されるのが普通）。
-    /// `番` 単体を許さないのは `○○市 3番線` のような駅の表示を拾わないため。
-    /// 2連の `\d+-\d+` を番地とみなさないのは `8:30-17:15` のような時刻範囲に当たるため。
+    /// 市区町村の文字の**後ろに**番地が続く行を住所とみなす。都道府県は要求しない（省略されるのが普通）。
+    ///
+    /// 住所は「市区町村 → 町名 → 番地」の順に書くので、番地より前に市区町村の文字が無ければ
+    /// 住所ではない。行を先頭から1回なぞり、市区町村の文字を見た後に出てきた数字の並びだけを
+    /// 番地の候補にする。
     private func hasAddress(_ text: String) -> Bool {
-        let hasMunicipality = text.contains { rules.municipalityMarkers.contains($0) }
-        let hasBlockNumber = text.contains(/[0-9]+-[0-9]+-[0-9]+/)
-            || text.contains(/[0-9]+丁目/)
-            || text.contains(/[0-9]+番地/)
+        let characters = Array(text)
+        var index = 0
+        var hasSeenMunicipality = false
 
-        return hasMunicipality && hasBlockNumber
+        while index < characters.count {
+            guard Self.isASCIIDigit(characters[index]) else {
+                if rules.municipalityMarkers.contains(characters[index]) { hasSeenMunicipality = true }
+                index += 1
+                continue
+            }
+
+            // ハイフンでつながった数字の並びを1つ読む（`1-2-3` → ["1", "2", "3"]）
+            let start = index
+            var groups = [""]
+
+            while index < characters.count {
+                if Self.isASCIIDigit(characters[index]) {
+                    groups[groups.count - 1].append(characters[index])
+                } else if characters[index] == "-",
+                          index + 1 < characters.count,
+                          Self.isASCIIDigit(characters[index + 1]) {
+                    groups.append("")
+                } else {
+                    break
+                }
+                index += 1
+            }
+
+            let isBlock = isBlockNumber(
+                groups,
+                precededBy: start > 0 ? characters[start - 1] : nil,
+                followedBy: characters[index...].prefix(2)
+            )
+            if hasSeenMunicipality, isBlock { return true }
+        }
+
+        return false
     }
 
-    private func hasPhoneNumber(_ text: String) -> Bool {
-        text.contains(/0[789]0-?[0-9]{4}-?[0-9]{4}/)
-            || text.contains(/0[0-9]{1,3}-[0-9]{2,4}-[0-9]{4}/)
+    /// 数字の並びが番地の書き方か。
+    ///
+    /// - 漢字の書き方: `1丁目` / `4番地` / `1番2号`。`番` 単体を許さないのは
+    ///   `○○市 3番線` のような駅の表示を拾わないため
+    /// - `1-2-3`（部屋番号つきの `1-2-3-405` も）: 日付（`2026-09-12`）と電話番号（`03-1234-5678`）、
+    ///   桁の多い通し番号（`1234-5678-9012`）を除く
+    /// - `4-5`: 町名に直接続くときだけ（`万町4-5`）。空白や記号の後ろの2連は
+    ///   時刻の範囲（`8:30-17:15`）や点数（`3-2`）のことが多い
+    private func isBlockNumber(
+        _ groups: [String],
+        precededBy previous: Character?,
+        followedBy following: ArraySlice<Character>
+    ) -> Bool {
+        let next = following.first
+
+        if following.elementsEqual("丁目") || following.elementsEqual("番地") { return true }
+        if next == "番", let afterNext = following.dropFirst().first, Self.isASCIIDigit(afterNext) { return true }
+
+        // 番地の数字は 0 で始まらない。0 始まりの並びは日付の月日か電話番号
+        guard groups.allSatisfy({ rules.addressBlockGroupDigits.contains($0.count) && !$0.hasPrefix("0") }) else {
+            return false
+        }
+
+        switch groups.count {
+        case 3, 4:
+            let block = groups.prefix(3)
+            let digitCount = block.reduce(0) { $0 + $1.count }
+
+            return digitCount <= rules.addressBlockMaxDigits && !isDate(Array(block))
+        case 2:
+            return previous.map(Self.isJapaneseLetter) ?? false && next != ":"
+        default:
+            return false
+        }
+    }
+
+    /// 0 埋めの無い日付（`2026-9-12`）。0 埋めのある日付は「0 で始まらない」の条件で先に落ちる
+    private func isDate(_ groups: [String]) -> Bool {
+        guard groups.count == 3, groups[0].count == 4,
+              let year = Int(groups[0]), let month = Int(groups[1]), let day = Int(groups[2]) else {
+            return false
+        }
+
+        return (1900...2100).contains(year) && (1...12).contains(month) && (1...31).contains(day)
+    }
+
+    private static func isASCIIDigit(_ character: Character) -> Bool {
+        character.isASCII && character.isNumber
+    }
+
+    /// 漢字・ひらがな・カタカナ（町名に使われる文字）
+    private static func isJapaneseLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy {
+            (0x3040...0x30FF).contains($0.value) || (0x4E00...0x9FFF).contains($0.value) || $0 == "々"
+        }
+    }
+
+    /// 日本の電話番号の書式。もっと長い数字の並びの一部であるときは拾わない
+    /// （`注文番号 1209012345678`。前後の条件は郵便番号と同じ）。
+    ///
+    /// - 携帯と IP 電話（`070` / `080` / `090` / `050`）: 11桁。ハイフンは無くてもよい
+    /// - 固定電話とフリーダイヤル: ハイフン区切りで**合計がちょうど10桁**
+    ///   （`03-1234-5678` / `0426-12-3456` / `0120-123-456`）。桁数を見ないと
+    ///   「月-日-年」の日付（`01-02-2026`）が電話番号になる
+    ///
+    /// 番号の範囲を返す（マスクで番号そのものの末尾だけを残すため）。
+    /// 1行に複数あるときは、最初に出てくる番号。
+    private func phoneNumberRange(in text: String) -> Range<String.Index>? {
+        let mobile = text.firstMatch(of: /(?:^|[^0-9-])(0[5789]0-?[0-9]{4}-?[0-9]{4})(?![0-9]|-[0-9])/)
+            .map(\.output.1)
+        let landline = text.matches(of: /(?:^|[^0-9-])(0[0-9]{1,3}-[0-9]{2,4}-[0-9]{3,4})(?![0-9]|-[0-9])/)
+            .map(\.output.1)
+            .first { $0.count { $0 != "-" } == rules.landlinePhoneDigits }
+
+        return [mobile, landline]
+            .compactMap { $0 }
+            .min { $0.startIndex < $1.startIndex }
+            .map { $0.startIndex..<$0.endIndex }
+    }
+
+    /// パスポート番号の書式（英字2 + 数字7）の範囲
+    private func identityDocumentNumberRange(in text: String) -> Range<String.Index>? {
+        text.firstMatch(of: /\b[A-Z]{2}[0-9]{7}\b/)?.range
+    }
+
+    /// `123-4567` の形。ただし、もっと長い数字の並びの一部であるときは郵便番号にしない
+    /// （`注文番号 20261119-00123` の `119-0012`、`1234-5678-9012` の `234-5678`）。
+    /// 直前が数字かハイフン、直後が数字か「ハイフン + 数字」なら、長い並びの途中とみなす。
+    ///
+    /// 直前の英字は除外しない。OCR が `〒` を `T` と読むことがあり、
+    /// 英字を条件に入れると `T150-0041` を見逃す（代わりに `A123-4567` のような型番は拾う）
+    private func hasPostalCode(_ text: String) -> Bool {
+        text.contains(/(?:^|[^0-9-])[0-9]{3}-[0-9]{4}(?![0-9]|-[0-9])/)
     }
 
     // MARK: - マスク
@@ -180,11 +458,55 @@ struct FindingPolicy: Sendable {
             // 郵便番号も末尾を残さない（下4桁だけで町域が特定できるため、
             // 「どのカードか」を示すカード番号の末尾4桁とは性質が違う）
             maskedDigits(text, keepingTrailing: 0)
-        case .cardNumber, .identityDocumentNumber, .phoneNumber:
-            maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        case .cardNumber:
+            maskedCardNumber(text)
+        case .identityDocumentNumber:
+            maskedDigits(text, keepingTailOf: identityDocumentNumberRange(in: text))
+        case .phoneNumber:
+            maskedDigits(text, keepingTailOf: phoneNumberRange(in: text))
         case .bystanderFace:
             text   // 顔は文字を持たない。ここに来ることはないが網羅のために置く
         }
+    }
+
+    /// カード番号そのものの末尾だけを残し、同じ行の他の数字はすべて伏せる
+    /// （`4111 1111 1111 1111 12/28` → `**** **** **** 1111 **/**`）。
+    ///
+    /// 行の末尾を残すと、番号の後ろに有効期限やセキュリティコードがあるとき、
+    /// 残る数字がそちらに移る（どのカードか分からず、期限がそのまま出る）。
+    /// 期限とセキュリティコードは「どのカードか」の識別に役立たないので残さない。
+    /// 番号が見つからない文字列は、行の末尾を残す。
+    private func maskedCardNumber(_ text: String) -> String {
+        guard let match = cardNumberMatch(in: text) else {
+            return maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        }
+
+        return maskedDigits(text, keeping: Set(match.digitOffsets.suffix(rules.maskedTrailingDigits)))
+    }
+
+    /// 番号の範囲の中にある数字の末尾だけを残し、同じ行の他の数字はすべて伏せる
+    /// （`TEL 03-1234-5678 内線 123` → `TEL **-****-5678 内線 ***`）。
+    /// 行の末尾を残すと、番号の後ろに内線や時刻があるとき、残る数字がそちらに移る。
+    /// 番号が見つからない文字列は、行の末尾を残す。
+    private func maskedDigits(_ text: String, keepingTailOf range: Range<String.Index>?) -> String {
+        guard let range else {
+            return maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        }
+
+        let offsets = text.distance(from: text.startIndex, to: range.lowerBound)
+            ..< text.distance(from: text.startIndex, to: range.upperBound)
+        let digitOffsets = text.enumerated()
+            .filter { offsets.contains($0.offset) && Self.isMaskableDigit($0.element) }
+            .map(\.offset)
+
+        return maskedDigits(text, keeping: Set(digitOffsets.suffix(rules.maskedTrailingDigits)))
+    }
+
+    /// 指定した位置（行の何文字目か）の数字だけを残し、他の数字を伏せる
+    private func maskedDigits(_ text: String, keeping kept: Set<Int>) -> String {
+        String(text.enumerated().map { offset, character -> Character in
+            Self.isMaskableDigit(character) && !kept.contains(offset) ? "*" : character
+        })
     }
 
     /// 数字だけを伏せ、末尾の指定桁数だけ残す。区切り記号と文字はそのまま

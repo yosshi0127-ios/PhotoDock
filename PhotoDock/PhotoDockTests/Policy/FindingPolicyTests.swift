@@ -34,7 +34,7 @@ struct FindingPolicyTests {
 
     @Test("桁数が範囲外ならカード番号にしない", arguments: [
         "4111 1111 1111",          // 12桁（13未満）
-        "4111 1111 1111 1111 111"  // 19桁を超える
+        "41111111111111111234"     // 区切りの無い20桁。先頭16桁は有効だが、切り出す根拠が無い
     ])
     func cardNumberDigitCount(_ text: String) {
         #expect(kind(of: text) != .cardNumber)
@@ -45,9 +45,133 @@ struct FindingPolicyTests {
         #expect(kind(of: "4111-1111-1111-1111") == .cardNumber)
     }
 
+    /// 各ブランドの公開されているテスト番号。番号帯・桁数・Luhn がすべて合う
+    @Test("主要ブランドの番号は区切り方によらず危険", arguments: [
+        "4242 4242 4242 4242",      // Visa
+        "4012888888881881",         // Visa（区切りなし）
+        "5555 5555 5555 4444",      // Mastercard
+        "5105-1051-0510-5100",      // Mastercard
+        "2223 0031 2200 3222",      // Mastercard（2 で始まる番号帯）
+        "3782 822463 10005",        // American Express（4-6-5）
+        "371449635398431",          // American Express
+        "3056 930902 5904",         // Diners Club（4-6-4）
+        "3622 720627 1667",         // Diners Club
+        "3530 1113 3330 0000",      // JCB
+        "3566 0020 2036 0505",      // JCB
+        "6011 1111 1111 1117",      // Discover
+        "6200 0000 0000 0005",      // 銀聯
+        "４１１１ １１１１ １１１１ １１１１",  // 全角数字
+        "4111 - 1111 - 1111 - 1111" // 空白つきのハイフン
+    ])
+    func cardBrands(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .danger)
+    }
+
+    /// 行全体の数字を1本につなげると、隣の数字を巻き込んで Luhn に落ちる
+    @Test("カード番号の隣に別の数字があっても拾う", arguments: [
+        "4111 1111 1111 1111 12/28",                       // 有効期限
+        "4111 1111 1111 1111 123",                         // セキュリティコード
+        "カード番号 4111 1111 1111 1111 有効期限 12/28",
+        "No. 4111111111111111",
+        "2026-09-12 4111 1111 1111 1111",                  // 前に日付
+        "1 4111 1111 1111 1111"                            // 前に行番号
+    ])
+    func cardNumberNextToOtherDigits(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .danger)
+    }
+
+    /// どれも Luhn は通る。番号帯か桁数がブランドの割り当てに合わない
+    /// OCR が番号と有効期限の間の空白を落とした行（実測で出た形）
+    @Test("有効期限とつながったカード番号を拾う", arguments: [
+        "5555 5555 5555 444408/27",
+        "No.401288888888188112/28",
+        "353011133330000012/2028",          // 年が4桁
+        "411111111111111101/30",
+        "3782 822463 1000511/29",           // American Express
+        "カード番号4242424242424242有効期限 12/28"   // 期限は離れている（もともと拾える）
+    ])
+    func cardNumberJoinedWithExpiry(_ text: String) {
+        let match = sut.classify(text)
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .danger)
+    }
+
+    @Test("有効期限とつながったブランド不明の番号は要注意")
+    func unbrandedCardNumberJoinedWithExpiry() {
+        let match = sut.classify("1234 5678 1234 567012/28")
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .caution)
+    }
+
+    @Test("末尾が有効期限の形でなければ切り離さない", arguments: [
+        "401288888888188113/28",        // 13月は無い
+        "401288888888188100/28",        // 00月は無い
+        "401288888888188112/2",         // 年が1桁
+        "401288888888188112/285",       // 年が3桁
+        "401288888888188112/20285",     // 年が5桁
+        "401288888888188112/ab",
+        "401288888888188112 /28",       // 番号と / の間に空白
+        "4012888888881881123"           // セキュリティコードとつながった19桁（切る手がかりが無い）
+    ])
+    func digitsNotFollowedByExpiryAreNotSplit(_ text: String) {
+        #expect(kind(of: text) != .cardNumber)
+    }
+
+    @Test("Luhn が通ってもブランドの番号の形でなければカード番号にしない", arguments: [
+        "4901234567894",        // 13桁・JAN コードの形（日本の商品バーコードは 45 / 49 で始まる）
+        "411111111111116",      // Visa の番号帯だが15桁
+        "3782822463100003",     // American Express の番号帯だが16桁
+        "9123456789012348",     // どのブランドでもない16桁（区切りなし）
+        "5600000000000003"      // Mastercard の番号帯（51〜55）の外
+    ])
+    func luhnAloneIsNotEnough(_ text: String) {
+        #expect(kind(of: text) != .cardNumber)
+    }
+
+    /// 表に無いブランドのカードを見逃さないための受け皿。書式の一致だけなので断定しない
+    @Test("ブランド不明でも4桁×4で書かれて Luhn が通れば要注意")
+    func unbrandedCardShapedNumber() {
+        let match = sut.classify("1234 5678 1234 5670")
+
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .caution)
+
+        // 同じ番号でも区切りが無ければ、カードらしさの根拠が Luhn しか無い
+        #expect(kind(of: "1234567812345670") != .cardNumber)
+    }
+
+    /// 文字や長い空きを挟んだ数字はつなげない（表の別の列・別の項目）
+    @Test("離れた数字をつなげてカード番号にしない", arguments: [
+        "4111 1111 / 1111 1111",
+        "4111 1111     1111 1111",
+        "4111 1111 円 1111 1111"
+    ])
+    func distantDigitsAreNotJoined(_ text: String) {
+        #expect(kind(of: text) != .cardNumber)
+    }
+
+    @Test("ブランドの番号帯と桁数の照合", arguments: [
+        ("4111111111111111", true),
+        ("2221000000000000", true),     // Mastercard の番号帯の下端
+        ("2720990000000000", true),     // 上端
+        ("2220990000000000", false),    // 下端の外
+        ("2721000000000000", false)     // 上端の外
+    ])
+    func cardNumberFormatRanges(_ digits: String, _ expected: Bool) {
+        let matched = FindingRules.standard.cardNumberFormats.contains { $0.matches(digits) }
+
+        #expect(matched == expected)
+    }
+
     // MARK: - 認証情報
 
-    @Test("ラベル語がある行は認証情報として危険", arguments: [
+    @Test("ラベル語の後ろに値が続く行は認証情報として危険", arguments: [
         "パスワード: hunter2",
         "暗号化キー AbCd1234",
         "Password: correcthorse",
@@ -61,6 +185,88 @@ struct FindingPolicyTests {
 
         #expect(match?.kind == .credential)
         #expect(match?.severity == .danger)
+    }
+
+    /// 区切り記号・空白・全角の揺れがあっても、値が続いていれば危険
+    @Test("値の続き方の揺れを吸収する", arguments: [
+        "パスワード：hunter2",            // 全角コロン
+        "パスワード:hunter2",             // 空白なし
+        "password = hunter2",
+        "PASSWORD=correcthorse",
+        "暗証番号1234",                   // 区切りも空白もなし
+        "パスワード　ｈｕｎｔｅｒ２",      // 全角空白 + 全角英数
+        "Wi-Fi パスワード: abcd-efgh",    // 行の途中にラベル
+        "API_KEY=abcdEFGHijkl"
+    ])
+    func credentialValueVariants(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .credential)
+        #expect(match?.severity == .danger)
+    }
+
+    /// ログイン画面や設定画面のスクショにはラベル語だけが出る。値は写っていないので断定しない。
+    /// それでも所見には残す（値が次の行にある付箋やルーターのラベルを落とさないため）
+    @Test("ラベル語だけの行は認証情報だが要注意どまり", arguments: [
+        "パスワード",
+        "パスワードを忘れた方はこちら",
+        "パスワードを変更",
+        "パスワード（8文字以上）",
+        "パスワードは8文字以上で入力してください",
+        "パスワード:",
+        "Forgot password?",
+        "Password reset",
+        "Password must be at least 8 characters",
+        "暗証番号を入力",
+        "暗号化キー"
+    ])
+    func credentialLabelWithoutValue(_ text: String) {
+        let match = sut.classify(text)
+
+        #expect(match?.kind == .credential)
+        #expect(match?.severity == .caution)
+    }
+
+    /// 入力欄の伏せ字は値ではない（写っているのは「何か入力されている」ことだけ）
+    @Test("伏せ字になっている入力欄は要注意どまり", arguments: [
+        "Password: ********",
+        "パスワード: ••••••••",
+        "パスワード ●●●●●●●●",
+        "Password: ----"
+    ])
+    func maskedFieldIsNotAValue(_ text: String) {
+        #expect(sut.classify(text)?.severity == .caution)
+    }
+
+    /// 4 は暗証番号の桁数。それより短い並びは設定値（On / Off）や記号のことが多い
+    @Test("値とみなすのは4文字以上")
+    func credentialValueMinimumLength() {
+        #expect(sut.classify("Password: On")?.severity == .caution)
+        #expect(sut.classify("暗証番号 123")?.severity == .caution)
+        #expect(sut.classify("暗証番号 1234")?.severity == .danger)
+    }
+
+    /// 区切り記号が無いときは、数字を含む並びだけを値とみなす
+    @Test("区切りの無い英単語は値とみなさないが、数字を含めば値")
+    func credentialValueWithoutSeparatorNeedsDigit() {
+        #expect(sut.classify("Password correcthorse")?.severity == .caution)
+        #expect(sut.classify("Password hunter2")?.severity == .danger)
+    }
+
+    @Test("同じ行にラベルが複数あるとき、どれか1つに値が続けば危険")
+    func anyLabelOccurrenceWithValueIsDanger() {
+        #expect(sut.classify("パスワードを忘れた？ パスワード: hunter2")?.severity == .danger)
+        #expect(sut.classify("パスワード 暗証番号 1234")?.severity == .danger)
+    }
+
+    @Test("危険度は findings まで引き継がれる")
+    func credentialSeverityReachesFindings() {
+        let texts = [
+            RecognizedText(text: "パスワードを忘れた方はこちら", confidence: 1, region: .test),
+            RecognizedText(text: "パスワード: hunter2", confidence: 1, region: .test)
+        ]
+
+        #expect(sut.findings(in: texts).map(\.severity) == [.caution, .danger])
     }
 
     /// ラベル語は電話番号より先に試す。ラベルがあれば意図が明確なので、そちらを採る
@@ -154,16 +360,133 @@ struct FindingPolicyTests {
         #expect(kind(of: "新宿区 3番線のりば") != .address)
     }
 
+    @Test("番地の書き方の揺れを拾う", arguments: [
+        "新宿区西新宿2-8-1",
+        "新宿区西新宿 2-8-1",                    // 町名と番地の間に空白
+        "〒160-0023 東京都新宿区西新宿2-8-1",
+        "港区芝公園4-2-8-1203",                  // 部屋番号つき
+        "大阪市北区梅田1丁目2番3号",
+        "札幌市中央区北1条西2丁目",
+        "中野区本町1番2号",
+        "町田市原町田1234-5",                    // 番地が4桁
+        "八王子市万町4-5",                       // 丁目の無い町（2連）
+        "渋谷区神南1丁目2-3"
+    ])
+    func addressBlockNumberVariants(_ text: String) {
+        #expect(kind(of: text) == .address)
+    }
+
+    /// `2026-09-12` は「数字-数字-数字」の形をしている。市区町村の文字が同じ行にあるだけで
+    /// 住所になっていた
+    @Test("日付を番地とみなさない", arguments: [
+        "横浜市 2026-09-12",
+        "区分 2025-01-01",
+        "渋谷区 2026-9-12",          // 0 埋めなし
+        "川崎市 25-01-01 更新",       // 西暦2桁
+        "市民税 2026-06-30 納期限"
+    ])
+    func dateIsNotAddress(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
+    /// 電話番号も「数字-数字-数字」の形。住所を先に試すので、住所が取ってしまっていた
+    @Test("市区町村の文字と同じ行にある電話番号は、住所ではなく電話番号", arguments: [
+        "渋谷区役所 03-1234-5678",
+        "横浜市コールセンター 045-123-4567",
+        "新宿区 090-1234-5678"
+    ])
+    func phoneNumberAfterMunicipalityIsPhone(_ text: String) {
+        #expect(kind(of: text) == .phoneNumber)
+    }
+
+    @Test("桁の多い通し番号を番地とみなさない", arguments: [
+        "市場 1234-5678-9012",        // 12桁
+        "区画 12-345-67-89-10"        // 5連
+    ])
+    func serialNumberIsNotAddress(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
+    /// 住所は「市区町村 → 町名 → 番地」の順に書く
+    @Test("番地より前に市区町村の文字が無ければ住所にしない", arguments: [
+        "神南1-2-3",
+        "1-2-3 渋谷区",
+        "2丁目 町内会"
+    ])
+    func blockNumberNeedsMunicipalityBefore(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
+    /// 2連は時刻の範囲や点数にも当たる。町名に直接続くときだけ番地とみなす
+    @Test("町名に続かない2連の数字は番地とみなさない", arguments: [
+        "川崎市 3-2 で勝利",
+        "渋谷区役所 8:30-17:15",
+        "新宿区 10-20% オフ",
+        "港区(1-2)"
+    ])
+    func detachedPairIsNotAddress(_ text: String) {
+        #expect(kind(of: text) != .address)
+    }
+
     // MARK: - 電話番号・郵便番号・メール・パスポート
 
     @Test("携帯と固定の書式を電話番号として拾う", arguments: [
         "090-1234-5678",
         "08012345678",
         "03-1234-5678",
-        "0426-12-3456"
+        "0426-12-3456",
+        "07012345678",
+        "050-1234-5678",            // IP 電話（11桁）
+        "0120-123-456",             // フリーダイヤル（4-3-3）
+        "0120-12-3456",
+        "0570-012-345",             // ナビダイヤル
+        "FAX 06-6123-4567"
     ])
     func phoneNumbers(_ text: String) {
         #expect(kind(of: text) == .phoneNumber)
+    }
+
+    @Test("前後に文字や記号があっても電話番号として拾う", arguments: [
+        "TEL 03-1234-5678",
+        "TEL:045-123-4567",
+        "電話03-1234-5678",
+        "(03-1234-5678)",
+        "℡011-123-4567",
+        "携帯090-1234-5678まで",
+        "03-1234-5678 / 090-1234-5678"
+    ])
+    func phoneNumberWithSurroundingText(_ text: String) {
+        #expect(kind(of: text) == .phoneNumber)
+    }
+
+    @Test("長い数字の並びの一部は電話番号にしない", arguments: [
+        "注文番号 1209012345678",    // 途中の 09012345678
+        "ID 0901234567812",         // 後ろに数字が続く
+        "20260901234567890",
+        "伝票 1203-1234-5678",       // 前に数字が続く
+        "1-03-1234-5678",           // 前にハイフンでつながった数字がある
+        "03-1234-56789",            // 後ろに数字が続く
+        "090-1234-56789",
+        "090-1234-5678-01",         // 後ろにハイフンと数字が続く
+        "2026-0120-123-456"
+    ])
+    func partOfLongerNumberIsNotPhoneNumber(_ text: String) {
+        #expect(kind(of: text) != .phoneNumber)
+    }
+
+    @Test("合計が10桁でないハイフン区切りは固定電話にしない", arguments: [
+        "01-02-2026",       // 月-日-年の日付（8桁）
+        "08-15-1945",
+        "05-12-2024",
+        "03-12-3456",       // 8桁
+        "012-34-5678",      // 9桁
+        "012-345-678",      // 9桁
+        "03-123-456",       // 8桁
+        "0426-123-4567",    // 11桁
+        "0120-123-4567"     // 11桁
+    ])
+    func hyphenatedNumberNeedsTenDigits(_ text: String) {
+        #expect(kind(of: text) != .phoneNumber)
     }
 
     /// 「03-1234-5678」には郵便番号の書式（234-5678）が部分文字列として含まれる。
@@ -173,9 +496,35 @@ struct FindingPolicyTests {
         #expect(kind(of: "03-1234-5678") == .phoneNumber)
     }
 
-    @Test("郵便番号の書式を拾う")
-    func postalCode() {
-        #expect(kind(of: "〒150-0041") == .postalCode)
+    @Test("郵便番号の書式を拾う", arguments: [
+        "〒150-0041",
+        "150-0041",
+        "〒 150-0041",
+        "郵便番号 150-0041",
+        "郵便番号:150-0041",
+        "(150-0041)",
+        "〒150-0041 東京都",
+        "150-0041東京都",           // 後ろに文字が直接続く
+        "T150-0041",               // OCR が 〒 を T と読んだとき
+        "〒150-0041-"              // 後ろのハイフンに数字が続かない
+    ])
+    func postalCode(_ text: String) {
+        #expect(kind(of: text) == .postalCode)
+    }
+
+    @Test("長い数字の並びの一部は郵便番号にしない", arguments: [
+        "市場1234-5678-9012",        // 途中の 234-5678
+        "注文番号 20261119-00123",    // 途中の 119-0012
+        "1234-5678",                // 前に数字が続く
+        "123-45678",                // 後ろに数字が続く
+        "123-4567-89",              // 後ろにハイフンと数字が続く
+        "伝票 123-4567-8901",
+        "2026-123-4567",            // 前にハイフンでつながった数字がある
+        "型番 XR-150-0041",
+        "12-345-6789"
+    ])
+    func partOfLongerNumberIsNotPostalCode(_ text: String) {
+        #expect(kind(of: text) != .postalCode)
     }
 
     /// 郵便番号と住所が同じ行にあるときは、情報量の多い住所を採る
@@ -198,6 +547,88 @@ struct FindingPolicyTests {
         #expect(match?.severity == .caution)
     }
 
+    // MARK: - 入口の正規化（全角・ハイフンの異体）
+
+    /// 日本語の文書では数字が全角で書かれ、ハイフンには見た目の同じ別の文字が使われる
+    @Test("全角の数字とハイフンの異体で書かれていても同じ種類として拾う", arguments: [
+        ("０９０－１２３４－５６７８", FindingKind.phoneNumber),       // 全角
+        ("090ー1234ー5678", .phoneNumber),                        // 長音記号
+        ("090−1234−5678", .phoneNumber),                        // マイナス記号（U+2212）
+        ("03‐1234‐5678", .phoneNumber),                         // ハイフン（U+2010）
+        ("03–1234–5678", .phoneNumber),                         // エンダッシュ（U+2013）
+        ("〒１５０－００４１", .postalCode),
+        ("〒150ー0041", .postalCode),
+        ("渋谷区神南１－２－３", .address),
+        ("渋谷区神南1ー2ー3", .address),
+        ("渋谷区神南1−2−3", .address),
+        ("八王子市万町４ー５", .address),
+        ("ｙａｍａｄａ＠ｅｘａｍｐｌｅ．ｃｏｍ", .email),
+        ("ＡＢ１２３４５６７", .identityDocumentNumber),
+        ("4111‐1111‐1111‐1111", .cardNumber),
+        ("4111　1111　1111　1111", .cardNumber),                  // 全角空白
+        ("４１１１ー１１１１ー１１１１ー１１１１", .cardNumber),
+        ("パスワード：ｈｕｎｔｅｒ２", .credential)
+    ])
+    func widthAndHyphenVariants(_ text: String, _ expected: FindingKind) {
+        #expect(kind(of: text) == expected)
+    }
+
+    @Test("正規化は全角の英数記号とハイフンの異体だけを半角に寄せる", arguments: [
+        ("０９０－１２３４－５６７８", "090-1234-5678"),
+        ("Ａｂｃ＠ｅｘａｍｐｌｅ．ｃｏｍ", "Abc@example.com"),
+        ("1ー2ー3", "1-2-3"),
+        ("1‐2‑3‒4–5—6―7−8", "1-2-3-4-5-6-7-8"),
+        ("全角　空白", "全角 空白")
+    ])
+    func matchNormalization(_ input: String, _ expected: String) {
+        #expect(input.normalizedForMatching() == expected)
+    }
+
+    /// 長音記号を無条件にハイフンへ変えると、カタカナの語が壊れてラベル語に当たらなくなる
+    @Test("数字に挟まれていない長音記号とカタカナはそのまま", arguments: [
+        "パスワード",
+        "サーバー",
+        "コード1",       // 後ろだけ数字
+        "3ーム",         // 前だけ数字
+        "ﾊﾟｽﾜｰﾄﾞ",       // 半角カタカナも全角にしない
+        "渋谷区神南"
+    ])
+    func normalizationKeepsKatakanaAndProlongedSound(_ text: String) {
+        #expect(text.normalizedForMatching() == text)
+    }
+
+    /// 文字を1対1で置き換えるので、正規化した行をそのままマスクしても位置がズレない
+    @Test("正規化しても文字数は変わらない", arguments: [
+        "０９０－１２３４－５６７８",
+        "〒150ー0041 渋谷区神南１−２−３",
+        "ｙａｍａｄａ＠ｅｘａｍｐｌｅ．ｃｏｍ"
+    ])
+    func normalizationKeepsLength(_ text: String) {
+        #expect(text.normalizedForMatching().count == text.count)
+        #expect(text.normalizedForMatching().unicodeScalars.count == text.unicodeScalars.count)
+    }
+
+    @Test("正規化は2回かけても結果が変わらない")
+    func normalizationIsIdempotent() {
+        let once = "〒１５０ー００４１　０９０−１２３４−５６７８".normalizedForMatching()
+
+        #expect(once.normalizedForMatching() == once)
+    }
+
+    /// 判定は正規化後、マスクは元の文字列、と分かれていると、全角のメールアドレスを
+    /// 判定では拾えるのにマスクでは見つけられず、本文がそのまま出てしまう
+    @Test("全角で書かれた行もマスクされる", arguments: [
+        ("ｙａｍａｄａ＠ｅｘａｍｐｌｅ．ｃｏｍ", "y*****@example.com"),
+        ("０９０－１２３４－５６７８", "***-****-5678"),
+        ("渋谷区神南１ー２ー３", "渋谷区神南*-*-*"),
+        ("４１１１　１１１１　１１１１　１１１１", "**** **** **** 1111")
+    ])
+    func fullWidthLinesAreMasked(_ input: String, _ expected: String) {
+        let texts = [RecognizedText(text: input, confidence: 1, region: .test)]
+
+        #expect(sut.findings(in: texts).first?.maskedText == expected)
+    }
+
     @Test("何も該当しない行は所見にならない", arguments: [
         "こんにちは",
         "2026年9月8日",
@@ -214,9 +645,96 @@ struct FindingPolicyTests {
         #expect(sut.masked("4111 1111 1111 1111", as: .cardNumber) == "**** **** **** 1111")
     }
 
+    /// 残すのは行の末尾ではなく、カード番号そのものの末尾4桁
+    @Test("カード番号の隣に別の数字があっても、番号の末尾4桁だけを残す", arguments: [
+        ("4111 1111 1111 1111 12/28", "**** **** **** 1111 **/**"),          // 有効期限
+        ("4111 1111 1111 1111 123", "**** **** **** 1111 ***"),              // セキュリティコード
+        ("カード番号 5105-1051-0510-5100 有効期限 12/28", "カード番号 ****-****-****-5100 有効期限 **/**"),
+        ("2026-09-12 4111 1111 1111 1111", "****-**-** **** **** **** 1111"), // 前に日付
+        ("1 4111 1111 1111 1111", "* **** **** **** 1111"),                  // 前に行番号
+        ("No. 4012888888881881 12/28", "No. ************1881 **/**"),        // 区切りなし
+        ("3782 822463 10005 12/28", "**** ****** *0005 **/**"),              // American Express
+        ("1234 5678 1234 5670 12/28", "**** **** **** 5670 **/**")           // ブランド不明（要注意）
+    ])
+    func maskedCardNumberKeepsCardTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .cardNumber) == expected)
+    }
+
+    @Test("有効期限とつながったカード番号も、番号の末尾4桁だけを残す", arguments: [
+        ("5555 5555 5555 444408/27", "**** **** **** 4444**/**"),
+        ("No.401288888888188112/28", "No.************1881**/**"),
+        ("353011133330000012/2028", "************0000**/****")
+    ])
+    func maskedCardNumberJoinedWithExpiry(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .cardNumber) == expected)
+    }
+
+    @Test("1行にカード番号が2つあるときは、最初の番号の末尾4桁だけを残す")
+    func maskedCardNumberWithTwoCards() {
+        #expect(
+            sut.masked("4111 1111 1111 1111 / 5555 5555 5555 4444", as: .cardNumber)
+                == "**** **** **** 1111 / **** **** **** ****"
+        )
+    }
+
+    @Test("カード番号が見つからない文字列は、行の末尾4桁を残す")
+    func maskedCardNumberFallsBackToLineTail() {
+        #expect(sut.masked("1234 5678", as: .cardNumber) == "**** 5678")
+    }
+
+    @Test("カード番号のマスクは findings まで引き継がれる")
+    func cardNumberMaskReachesFindings() {
+        let texts = [RecognizedText(text: "4111 1111 1111 1111 12/28", confidence: 1, region: .test)]
+
+        #expect(sut.findings(in: texts).first?.maskedText == "**** **** **** 1111 **/**")
+    }
+
     @Test("電話番号は末尾4桁だけ残す")
     func maskedPhoneNumber() {
         #expect(sut.masked("090-1234-5678", as: .phoneNumber) == "***-****-5678")
+    }
+
+    /// 残すのは行の末尾ではなく、電話番号そのものの末尾4桁
+    @Test("電話番号の隣に別の数字があっても、番号の末尾4桁だけを残す", arguments: [
+        ("TEL 03-1234-5678 内線 123", "TEL **-****-5678 内線 ***"),
+        ("03-1234-5678 受付 9:00-18:00", "**-****-5678 受付 *:**-**:**"),
+        ("2026年11月20日 090-1234-5678", "****年**月**日 ***-****-5678"),     // 前に日付
+        ("08012345678 (2回目)", "*******5678 (*回目)"),                      // ハイフンなし
+        ("フリーダイヤル 0120-123-456 24時間", "フリーダイヤル ****-**3-456 **時間"),
+        ("渋谷区役所 03-1234-5678 3階", "渋谷区役所 **-****-5678 *階")
+    ])
+    func maskedPhoneNumberKeepsNumberTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .phoneNumber) == expected)
+    }
+
+    @Test("1行に電話番号が2つあるときは、最初の番号の末尾4桁だけを残す", arguments: [
+        ("03-1234-5678 / 090-1234-5678", "**-****-5678 / ***-****-****"),
+        ("090-1234-5678 / 03-1234-5679", "***-****-5678 / **-****-****")
+    ])
+    func maskedPhoneNumberWithTwoNumbers(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .phoneNumber) == expected)
+    }
+
+    @Test("電話番号が見つからない文字列は、行の末尾4桁を残す")
+    func maskedPhoneNumberFallsBackToLineTail() {
+        #expect(sut.masked("1234 5678", as: .phoneNumber) == "**** 5678")
+    }
+
+    @Test("身分証番号は番号そのものの末尾4桁だけを残す", arguments: [
+        ("AB1234567", "AB***4567"),
+        ("AB1234567 2030-01-15", "AB***4567 ****-**-**"),
+        ("旅券番号 AB1234567 発行 2020年1月15日", "旅券番号 AB***4567 発行 ****年*月**日"),
+        ("2030-01-15 AB1234567", "****-**-** AB***4567")
+    ])
+    func maskedIdentityDocumentNumberKeepsNumberTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .identityDocumentNumber) == expected)
+    }
+
+    @Test("電話番号のマスクは findings まで引き継がれる")
+    func phoneNumberMaskReachesFindings() {
+        let texts = [RecognizedText(text: "TEL 03-1234-5678 内線 123", confidence: 1, region: .test)]
+
+        #expect(sut.findings(in: texts).first?.maskedText == "TEL **-****-5678 内線 ***")
     }
 
     /// 住所は番地を全部伏せる。漢字は残るので「どこの住所か」の識別はできる
@@ -332,10 +850,21 @@ struct FindingPolicyTests {
 
     // MARK: - findings（入口）
 
-    @Test("確度が閾値未満の行は誤読として捨てる")
+    /// Vision の確度は 0.3 / 0.5 / 1.0 の3段階で、0.3 にも正しい読みが混ざる。
+    /// 値は Vision が返す Float をそのまま Double にしたもの（0.30000001192092896）
+    @Test("Vision が返す最低の確度（0.3）の行も判定する", arguments: [
+        Double(Float(0.3)), 0.3, 0.5, 1
+    ])
+    func lowestVisionConfidenceIsClassified(_ confidence: Double) {
+        let texts = [RecognizedText(text: "4111 1111 1111 1111", confidence: confidence, region: .test)]
+
+        #expect(sut.findings(in: texts).map(\.kind) == [.cardNumber])
+    }
+
+    @Test("確度が閾値未満の行は使わない")
     func lowConfidenceIsDropped() {
         let texts = [
-            RecognizedText(text: "4111 1111 1111 1111", confidence: 0.4, region: .test),
+            RecognizedText(text: "4111 1111 1111 1111", confidence: 0.2, region: .test),
             RecognizedText(text: "090-1234-5678", confidence: 0.9, region: .test)
         ]
 
@@ -368,8 +897,14 @@ struct FindingPolicyTests {
             rules: FindingRules(
                 minimumConfidence: 0.95,
                 municipalityMarkers: FindingRules.standard.municipalityMarkers,
+                addressBlockGroupDigits: FindingRules.standard.addressBlockGroupDigits,
+                addressBlockMaxDigits: FindingRules.standard.addressBlockMaxDigits,
                 credentialLabels: FindingRules.standard.credentialLabels,
+                credentialValueMinLength: FindingRules.standard.credentialValueMinLength,
                 cardNumberDigits: FindingRules.standard.cardNumberDigits,
+                cardNumberFormats: FindingRules.standard.cardNumberFormats,
+                unbrandedCardGrouping: FindingRules.standard.unbrandedCardGrouping,
+                landlinePhoneDigits: FindingRules.standard.landlinePhoneDigits,
                 maskedTrailingDigits: FindingRules.standard.maskedTrailingDigits,
                 bystanderFaceMaxArea: FindingRules.standard.bystanderFaceMaxArea,
                 bystanderFaceEdgeMargin: FindingRules.standard.bystanderFaceEdgeMargin,

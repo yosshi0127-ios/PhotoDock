@@ -29,6 +29,9 @@ struct ScanSummaryPolicy: Sendable {
 
         case .missing:
             next.missing += 1
+        case .failed:
+            // 診断できていないので scanned にも所見にも数えない
+            next.failed += 1
         }
 
         return next

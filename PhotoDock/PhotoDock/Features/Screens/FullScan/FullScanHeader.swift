@@ -76,6 +76,10 @@ struct FullScanHeader: View {
                 Label("未診断 \(undiagnosed.formatted())", systemImage: "icloud.slash")
                     .foregroundStyle(.secondary)
             }
+            if summary.failed > 0 {
+                Label("失敗 \(summary.failed.formatted())", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            }
         }
         .font(.subheadline)
         .monospacedDigit()

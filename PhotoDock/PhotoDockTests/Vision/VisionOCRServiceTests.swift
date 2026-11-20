@@ -17,6 +17,15 @@ struct VisionOCRServiceTests {
     private let pixels = StubPixelSourceService()
 
     /// カード番号が描かれた画像（stub-0）のバイト列
+    /// 読めた行。失敗したら空（テストは後続の #expect で落ちる）
+    private func recognizedTexts(in data: Data, maxPixelSize: Int) async -> [RecognizedText] {
+        guard case let .recognized(texts) = await sut.recognizeText(in: data, maxPixelSize: maxPixelSize) else {
+            Issue.record("読めるはずの画像で failed が返った")
+            return []
+        }
+        return texts
+    }
+
     private func cardImageData() async throws -> Data {
         guard case let .data(data) = await pixels.fetchImageData(for: "stub-0", mode: .localOnly) else {
             throw TestError.fixtureUnavailable
@@ -26,7 +35,7 @@ struct VisionOCRServiceTests {
 
     @Test("描かれた文字を読み、行ごとに RecognizedText を返す")
     func recognizesRenderedLines() async throws {
-        let results = await sut.recognizeText(in: try await cardImageData(), maxPixelSize: 2_000)
+        let results = await recognizedTexts(in: try await cardImageData(), maxPixelSize: 2_000)
 
         #expect(results.count == 2)
         #expect(results.contains { $0.text.replacingOccurrences(of: " ", with: "").contains("4111111111111111") })
@@ -37,7 +46,7 @@ struct VisionOCRServiceTests {
     /// 画像の上端（y=60/400 ≒ 0.15）に描いた行が、上半分に来ることを確認する。
     @Test("Region が左上原点になっている（上の行が小さい y を持つ）")
     func regionUsesTopLeftOrigin() async throws {
-        let results = await sut.recognizeText(in: try await cardImageData(), maxPixelSize: 2_000)
+        let results = await recognizedTexts(in: try await cardImageData(), maxPixelSize: 2_000)
 
         let card = try #require(results.first { $0.text.contains("4111") })
         let name = try #require(results.first { $0.text.contains("YAMADA") })
@@ -55,18 +64,29 @@ struct VisionOCRServiceTests {
     func maxPixelSizeIsApplied() async throws {
         let data = try await cardImageData()
 
-        let readable = await sut.recognizeText(in: data, maxPixelSize: 2_000)
-        let tooSmall = await sut.recognizeText(in: data, maxPixelSize: 48)
+        let readable = await recognizedTexts(in: data, maxPixelSize: 2_000)
+        let tooSmall = await recognizedTexts(in: data, maxPixelSize: 48)
 
         #expect(readable.contains { $0.text.contains("4111") })
         #expect(!tooSmall.contains { $0.text.contains("4111") })
     }
 
-    @Test("画像として読めないデータは空配列（1枚の失敗でスキャンを止めない）")
-    func brokenDataYieldsNoResults() async {
-        let results = await sut.recognizeText(in: Data("not an image".utf8), maxPixelSize: 2_000)
+    /// 空配列で返すと「文字が無かった」になり、壊れた写真が診断済み・所見なしとして記録される
+    @Test("画像として読めないデータは failed（クラッシュもしない）")
+    func brokenDataFails() async {
+        let outcome = await sut.recognizeText(in: Data("not an image".utf8), maxPixelSize: 2_000)
 
-        #expect(results.isEmpty)
+        #expect(outcome == .failed)
+    }
+
+    /// 上と区別すべき正常系。文字の無い写真が大半なので、これが failed になると全滅する
+    @Test("文字のない画像は failed ではなく0行の recognized")
+    func imageWithoutTextIsRecognizedWithNoLines() async throws {
+        guard case let .data(data) = await pixels.fetchImageData(for: "stub-1", mode: .localOnly) else {
+            throw TestError.fixtureUnavailable
+        }
+
+        #expect(await sut.recognizeText(in: data, maxPixelSize: 2_000) == .recognized([]))
     }
 
     // MARK: - 前段（文字らしい矩形の有無で OCR を省く）
