@@ -46,8 +46,29 @@ struct ScanCountsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            // 文字を読む処理が失敗した写真。「問題なし」に混ぜず、次回やり直すことを伝える
+            if summary.failed > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("診断できなかった") {
+                        Text(summary.failed.formatted())
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("文字を読み取れなかった写真です。次の診断でもう一度確認します。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
+}
+
+#Preview("診断できなかった写真がある") {
+    ScanCountsView(summary: ScanSummary(
+        scanned: 2_480, notAvailableLocally: 0, missing: 0, failed: 4, dangerPhotos: 2, cautionPhotos: 18
+    ))
+    .padding()
 }
 
 #Preview("スキャン中") {

@@ -4,6 +4,7 @@
 //
 
 import Dependencies
+import Foundation
 
 /// ライブラリの1枚を診断する。取得だけを担い、診断は ScanImageUseCase に委譲する
 /// （ライブラリ経路と画像データ経路で ocr → Policy のパイプラインが必ず一致する）。
@@ -18,7 +19,14 @@ struct ScanPhotoUseCase: Sendable {
         case .notAvailableLocally: .notAvailableLocally
         case .unavailableInCloud: .unavailableInCloud
         case .missing: .missing
-        case let .data(data): .scanned(await scanImage(imageData: data, quality: quality))
+        case let .data(data): await scan(data, quality: quality)
+        }
+    }
+
+    private func scan(_ data: Data, quality: ScanQuality) async -> PhotoScanOutcome {
+        switch await scanImage(imageData: data, quality: quality) {
+        case let .scanned(findings): .scanned(findings)
+        case .failed: .failed
         }
     }
 }

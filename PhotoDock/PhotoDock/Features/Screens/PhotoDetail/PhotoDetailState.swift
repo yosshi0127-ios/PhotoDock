@@ -19,6 +19,8 @@ final class PhotoDetailState {
         case checked([StoredFinding])
         /// 読み込めなかった（選択の読み込み失敗・画像として壊れている）
         case undecodable
+        /// 画像は表示できたが、文字を読む処理が失敗した。「所見なし」とは言えない
+        case failed
     }
 
     private(set) var phase: Phase = .empty
@@ -51,8 +53,12 @@ final class PhotoDetailState {
 
         image = decoded
         phase = .checking
-        let findings = await scanImage(imageData: imageData, quality: .precise)
-        // 表示は記録から開いたときと同じ形（本文なし）に揃える
-        phase = .checked(findings.map(StoredFinding.init))
+        switch await scanImage(imageData: imageData, quality: .precise) {
+        case let .scanned(findings):
+            // 表示は記録から開いたときと同じ形（本文なし）に揃える
+            phase = .checked(findings.map(StoredFinding.init))
+        case .failed:
+            phase = .failed
+        }
     }
 }

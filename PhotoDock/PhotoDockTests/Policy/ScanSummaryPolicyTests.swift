@@ -69,12 +69,23 @@ struct ScanSummaryPolicyTests {
     @Test("取得できなかった写真は scanned に数えない", arguments: [
         ScanRecord.Outcome.notAvailableLocally,
         ScanRecord.Outcome.unavailableInCloud,
-        ScanRecord.Outcome.missing
+        ScanRecord.Outcome.missing,
+        ScanRecord.Outcome.failed
     ])
     func unavailablePhotoIsNotScanned(_ outcome: ScanRecord.Outcome) {
         let summary = sut.adding(record("1", outcome), to: .empty)
 
         #expect(summary.scanned == 0)
+        #expect(summary.completed == 1)
+    }
+
+    @Test("文字を読めなかった写真は failed に数え、所見にも scanned にも数えない")
+    func failedPhotoIsCountedSeparately() {
+        let summary = sut.adding(record("1", .failed), to: .empty)
+
+        #expect(summary.failed == 1)
+        #expect(summary.scanned == 0)
+        #expect(summary.flaggedPhotos == 0)
         #expect(summary.completed == 1)
     }
 

@@ -233,7 +233,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 |---|---|---|
 | `photoLibrary` | メタデータ全件列挙 + 権限 | 第1段 |
 | `pixelSource` | 画像バイト列（iCloud 判定込み）+ 一覧用サムネイル | 第2段 |
-| `ocr` | 文字認識（座標変換込み）。前段に文字矩形の検出を置き、文字のない写真では OCR を省く | 第2段 |
+| `ocr` | 文字認識（座標変換込み）。前段に文字矩形の検出を置き、文字のない写真では OCR を省く。**読めなかったときは空配列ではなく失敗を返す**（「文字が無かった」と混ぜると、見ていない写真が診断済み・所見なしとして記録される） | 第2段 |
 | `faceDetection` | 顔の位置と向き（写り込み判定の入力）。**シミュレータでは検出ゼロで続行** | 第2段 |
 | `scanRecords` | スキャン済み記録の保存（SwiftData）。所見ゼロも記録し、2回目以降は新しい写真だけ診断する | 第2段 |
 | `network` | いま通信してよい回線か（Wi-Fi・低データモードでない）。iCloud の写真を取り寄せる前に1回だけ見る | 第2段 |
@@ -243,7 +243,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 - UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す。診断する写真があれば OS に継続を申告し、1枚ごとに進捗を報告）/ `LoadThumbnailUseCase`
 - 画面4つ: 診断ホーム / 全量スキャン（**精密のみ**。実機でクイックの 1.63 倍で済むためプリセットは出さない） / 所見のある写真グリッド / 写真詳細（一覧からは**記録を表示するだけで再検査しない**。PhotosPicker の1枚だけ精密で診断）
 - 保存: `SwiftDataScanRecordRepository`。所見ゼロも「スキャン済み」として記録し、2回目以降は新しい写真の分だけ診断する。本文（マスク済み文字列）は保存しない
-- ユニットテスト119件。座標変換は合成画像を本物の Vision に通して固定してある
+- ユニットテスト169件。座標変換は合成画像を本物の Vision に通して固定してある
 - 実測（シミュレータ・162枚）: 並列化は効かない（1→2 で 7%、8 で破綻）。OCR の前段で 3.1 倍速。詳細は brief
 
-**残り: OCR の失敗を outcome として区別する（失敗を「所見なし」として記録しない）/ 対処（削除・非表示）/ 経路チップ / Foundation Models による credential の意味判定（実機のみ）。** 写り込み顔の閾値は仮置きで、実機のカメラロールで調整する。バックグラウンド継続は有料プログラム加入後に entitlement「Background GPU Access」を付けて有効化する（`UIBackgroundModes` は不要だった）。
+**残り: 顔検出の失敗を「検出ゼロ」と区別する / 対処（削除・非表示）/ 経路チップ / Foundation Models による credential の意味判定（実機のみ）。** 写り込み顔の閾値は仮置きで、実機のカメラロールで調整する。バックグラウンド継続は有料プログラム加入後に entitlement「Background GPU Access」を付けて有効化する（`UIBackgroundModes` は不要だった）。

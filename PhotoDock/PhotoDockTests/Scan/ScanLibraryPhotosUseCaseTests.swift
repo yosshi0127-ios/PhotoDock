@@ -150,6 +150,43 @@ struct ScanLibraryPhotosUseCaseTests {
 
     // MARK: - 記録による短縮
 
+    /// 読めなかった写真を「診断済み・所見なし」で保存すると、次回から見直されなくなる
+    @Test("OCR が失敗した写真は failed として流れ、そのまま記録に保存される")
+    func recordsOCRFailureAsFailed() async {
+        let repo = SpyScanRecordRepository()
+        let pixels = SpyPixelSourceService(outcome: .data(Data("image".utf8)))
+
+        let records = await scanAll(
+            assets(3), pixels: pixels, ocr: SpyOCRService(outcome: .failed), records: repo
+        )
+
+        #expect(records.count == 3)
+        #expect(records.allSatisfy { $0.outcome == .failed })
+        #expect(await repo.saved.allSatisfy { $0.outcome == .failed })
+    }
+
+    /// 失敗の記録は診断の事実ではない。次のスキャンでは記録を使わず、もう一度読む
+    @Test("failed の記録がある写真は、次のスキャンで診断し直す")
+    func retriesFailedRecords() async {
+        let targets = assets(3)
+        let pixels = SpyPixelSourceService(outcome: .data(Data("image".utf8)))
+        let failed = ScanRecord(
+            assetID: "asset-0",
+            modificationDate: nil,
+            scannedAt: Date(timeIntervalSince1970: 1_750_000_000),
+            quality: .quick,
+            generation: generation,
+            outcome: .failed
+        )
+        let existing = [failed, validRecord("asset-1")]
+
+        let records = await scanAll(targets, pixels: pixels, records: SpyScanRecordRepository(records: existing))
+
+        // 記録が有効な asset-1 だけが省かれ、失敗していた asset-0 は読み直される
+        #expect(Set(await pixels.requestedIDs) == ["asset-0", "asset-2"])
+        #expect(records.first { $0.assetID == "asset-0" }?.outcome == .scanned([]))
+    }
+
     /// 2回目以降の短縮の正体。ここが壊れると3万枚が毎回全部回る
     @Test("有効な記録がある写真は診断せず、記録をそのまま流す")
     func reusesValidRecords() async {

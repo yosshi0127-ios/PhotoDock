@@ -80,6 +80,14 @@ struct PhotoDetailView: View {
                 systemImage: "exclamationmark.triangle",
                 description: Text("別の写真を選んでください")
             )
+
+        case .failed:
+            // 「見つかりませんでした」と出すと、見ていないものを安全と言うことになる
+            ContentUnavailableView(
+                "この写真を診断できませんでした",
+                systemImage: "exclamationmark.triangle",
+                description: Text("文字を読み取る処理が失敗しました。もう一度選び直してください")
+            )
         }
     }
 }

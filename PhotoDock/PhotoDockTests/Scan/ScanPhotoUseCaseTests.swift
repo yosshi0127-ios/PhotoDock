@@ -114,4 +114,14 @@ struct ScanPhotoUseCaseTests {
 
         #expect(outcome == .scanned([]))
     }
+
+    /// 上の逆。読めなかった写真を 0件の scanned にすると、記録が「問題なし」になり再診断されない
+    @Test("OCR が失敗したら scanned ではなく failed が返る")
+    func failedWhenOCRFails() async {
+        let pixels = SpyPixelSourceService(outcome: .data(anyImageData))
+
+        let outcome = await scan(pixels: pixels, ocr: SpyOCRService(outcome: .failed))
+
+        #expect(outcome == .failed)
+    }
 }
