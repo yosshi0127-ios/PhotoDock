@@ -1,328 +1,192 @@
-# PhotoDock / 写真ドック
+# 写真ドック（PhotoDock）
 
-カメラロールにある「見られたらまずい写真」を、**端末の中だけで**洗い出す iOS アプリ。カード番号・パスワード・住所などが写った写真を全量スキャンで見つけ、どの写真のどこに何が写っているかを示す。写真は外部に送信しない。
+カメラロールにある「見られたらまずい写真」を洗い出す iOS アプリです。
 
-Swift 6 / SwiftUI / Vision / SwiftData / swift-dependencies ・ iOS 26
+カード番号・パスワード・住所などが写った写真を、ライブラリ全体のスキャンで見つけ、どの写真のどこに何が写っているかを示します。写真は端末の中だけで処理し、外部には送信しません。診断の結果は端末に記録され、2回目以降は新しい写真だけを診断します。
 
-<p>
-  <img src="docs/images/01-home.png" width="240" alt="診断ホーム。14枚を診断するボタンと、iCloud の写真も診断するかのトグル">
-  <img src="docs/images/02-result.png" width="240" alt="診断結果。7枚に所見があり、危険3・要注意4。所見のある写真が一覧に並ぶ">
-  <img src="docs/images/03-detail.png" width="240" alt="写真詳細。カード番号の位置に赤い枠が重なり、種類と危険度が表示される">
-</p>
+## 画面
 
-シミュレータに、ダミーの写真8枚（値はすべて架空）と標準のサンプル写真6枚を入れて診断した画面。14枚のうち7枚に所見が出て、注文番号の入ったレシートと風景写真6枚は所見なしになる。
+<table>
+  <tr>
+    <th>診断ホーム</th>
+    <th>診断結果</th>
+    <th>写真詳細</th>
+  </tr>
+  <tr>
+    <td><img src="docs/images/01-home.png" width="240" alt="診断ホーム。14枚を診断するボタンと、iCloud の写真も診断するかのトグル"></td>
+    <td><img src="docs/images/02-result.png" width="240" alt="診断結果。7枚に所見があり、危険3・要注意4。所見のある写真が一覧に並ぶ"></td>
+    <td><img src="docs/images/03-detail.png" width="240" alt="写真詳細。カード番号の位置に赤い枠が重なり、種類と危険度が表示される"></td>
+  </tr>
+</table>
 
-## 見どころ
+スクリーンショットは、シミュレータにダミーの写真8枚（値はすべて架空）と標準のサンプル写真6枚を入れて診断したものです。14枚のうち7枚に所見が出て、注文番号の入ったレシートと風景写真6枚は所見なしになります。
 
-### 1. 判定を実測で詰めた
+| 画面 | できること |
+|------|-----------|
+| 診断ホーム | ライブラリの枚数を数え、診断を始める。iCloud にある写真も診断するかを選べる |
+| 全量スキャン・診断結果 | 進捗と件数（危険・要注意・未診断・診断できなかった）を表示する。所見のある写真が、見つかった順に一覧へ増えていく |
+| 写真詳細 | 写真の上に所見の位置を枠で示し、種類と危険度を一覧表示する |
+| 1枚チェック | 写真を1枚選んで、その場で診断する |
 
-判定は正規表現・チェックサム・語彙で行う（生成モデルは使わない。3万枚を回す速度と、同じ写真に同じ結果を返す決定性のため）。ルールは机上で決めず、**文字を描いた画像を本物の Vision OCR に通し、見逃しと誤検出を数えて直した**。
+## 検出できるもの
+
+判定は正規表現・チェックサム・語彙で行います。生成モデルは使いません（数万枚を回す速度と、同じ写真に同じ結果を返す決定性のため）。
+
+| 種類 | 判定の方法 | 危険度 |
+|------|-----------|--------|
+| カード番号 | Luhn チェックが通り、ブランドの番号帯と桁数に合う | 危険 |
+| カード番号（ブランド不明） | Luhn チェックが通り、4桁×4で書かれている | 要注意 |
+| 認証情報 | トークンの書式（`sk-`・`ghp_`・`AKIA`・JWT・秘密鍵など）、または「パスワード」などのラベル語の後ろに値が続く | 危険 |
+| 認証情報（ラベル語だけ） | 「パスワードを忘れた方」のように、ラベル語はあるが値が続かない | 要注意 |
+| 住所 | 市区町村の文字の後ろに番地が続く | 要注意 |
+| 電話番号 | 携帯・IP 電話は11桁、固定電話・フリーダイヤルはハイフン区切りで合計10桁 | 要注意 |
+| 郵便番号 | 3桁-4桁（長い数字の並びの一部は除く） | 要注意 |
+| メールアドレス | 書式 | 要注意 |
+| パスポート番号 | 英字2文字 + 数字7桁の書式 | 要注意 |
+| 写り込みらしい顔 | 小さく、端にあるか横を向いている顔（実機のみ） | 要注意 |
+
+検出した文字を表示するときはマスクします（`**** **** **** 4242`）。記録には種類・危険度・位置だけを保存し、本文は残しません。
+
+## 構成
+
+クリーン3層と、swift-dependencies による DI です。
+
+```mermaid
+graph TD
+    features["Features<br/>Screens（View・State）/ UseCases"]
+    core["Core<br/>Models・Services・Repositories・Policy<br/>（Foundation のみ）"]
+    infra["Infrastructure<br/>PhotoKit・Vision・SwiftData・Network・BackgroundTasks"]
+    di["App/DI<br/>依存の登録（live / preview / test）"]
+
+    features --> core
+    infra --> core
+    di --> core
+    di --> infra
+```
+
+| 層 | 役割 | 持てる依存 |
+|----|------|-----------|
+| `Core/Models` | ドメインの値型 | なし |
+| `Core/Services`・`Core/Repositories` | 能力と永続化の protocol | なし |
+| `Core/Policy` | 判断（入力 → 結論）の純粋関数 | なし |
+| `Infrastructure/` | protocol の実装（PhotoKit・Vision・SwiftData など） | 実際の I/O |
+| `Features/UseCases` | 段取り。具体的な struct | `@Dependency`（ここだけ） |
+| `Features/Screens/<画面>` | State（`@Observable`）と View | State は UseCase のみ。View は依存を持たない |
+| `App/DI` | 依存の登録 | Core と Infrastructure の両方を知る |
+
+### 設計のポイント
+
+- **厳格なのは「依存の向き」と「注入点」の2つだけ**：それ以外は、普通の MVVM に軽い UseCase 層を足した形です。生の依存（`@Dependency`）を持てるのは UseCase だけで、State は UseCase 経由でしか I/O に触れません。
+- **判断は Policy、実行は UseCase**：「危険かどうか」「どう数えるか」は、I/O を持たない純粋関数として `Core/Policy` に置きます。フレームワークを起動せずに全パターンをテストできます。UseCase は順序だけを持ちます。
+- **見ていないものを「問題なし」と言わない**：iCloud にあって端末に無い写真、見つからない写真、文字を読む処理が失敗した写真は、「診断できた・所見なし」とは別の結果として記録し、件数を画面に出します。次のスキャンで必ずやり直します。
+- **依存の追加は3点セット**：Core の protocol → Infrastructure の実装 → `App/DI` への登録（live / preview / test の3値）。テスト用の値は、呼ばれたらクラッシュする実装にしてあります（上書きを忘れたときに、黙って本物を呼ばないため）。
+- **規約は機械で検査する**：層の違反と注入点の違反は SwiftLint の custom rules で、DI の登録漏れはシェルスクリプトで検査し、CI でも同じものを回します。正規表現の文字一致なので、すり抜ける書き方があることも分かったうえで使っています。
+
+構造の理由は [アーキテクチャと設計の理由](docs/architecture.md)、検査の仕組みと限界は [AI との開発と、機械検査](docs/development-with-ai.md) にあります。
+
+## 判定の精度
+
+判定のルールは、文字を描いた画像を本物の Vision OCR に通し、見逃しと誤検出を数えて直しました。
 
 | 実測で分かったこと | 対応 |
-|---|---|
-| Vision の確度は 0.3 / 0.5 / 1.0 の3段階で、正しく読めた行が 0.3 になる。閾値 0.5 がそれを判定の前に捨てていた | 閾値を 0.3 に。合成画像 720 枚で、新たに拾えた12行はすべて正しい検出、無害な文字からの誤検出は0件 |
+|-------------------|------|
+| Vision の確度は 0.3 / 0.5 / 1.0 の3段階で、正しく読めた行が 0.3 になる。閾値 0.5 がそれを判定の前に捨てていた | 閾値を 0.3 にした。合成画像 720 枚で、新たに拾えた12行はすべて正しい検出、無害な文字からの誤検出は0件 |
 | 注文番号や伝票番号の途中が、郵便番号・電話番号として拾われていた | 長い数字の並びの一部は拾わない。固定電話は合計10桁のときだけ拾う |
-| OCR が番号と有効期限の間の空白を落とし、カード番号を見逃していた | 期限の形が続くときは「月」を切り離して判定する |
+| OCR が番号と有効期限の間の空白を落とし、カード番号を見逃していた | 有効期限の形が続くときは「月」を切り離して判定する |
 | マスクが有効期限やセキュリティコードをそのまま表示していた | 番号そのものの末尾4桁だけを残し、同じ行の他の数字はすべて伏せる |
 
-カード番号を含む行を、フォント・大きさ・ぼかし・傾きを変えて描いた 360 枚では 357 枚を拾える。残る3枚は、セキュリティコードとつながった番号（切る位置の手がかりが無い）と数字の読み違いで、直さないと決めた理由を含めて [`docs/product-brief.md`](docs/product-brief.md) の「検出する種類」に残してある。
+カード番号を含む行を、フォント・大きさ・ぼかし・傾きを変えて描いた 360 枚では、357 枚を拾えます。
 
-ここまでの数字は**合成画像での実測**。本物のカメラロールで誤検出が増えすぎないかは、まだ確認できていない。
+ここまでの数字は**合成画像での実測**です。実機の本物の写真で誤検出が増えすぎないかは、まだ確認できていません。決めたことと直さないと決めたことは、[プロダクトの方針](docs/product-brief.md) の「検出する種類」に残してあります。
 
-### 2. 見ていないものを「問題なし」と言わない
+## 技術スタック
 
-診断アプリが一番やってはいけないのは、見ていない写真を安全と言うこと。結果の型で区別している。
-
-- iCloud にあって端末に無い写真、iCloud 側にも実体が無い写真、見つからない写真、**文字を読む処理が失敗した写真**は、どれも「診断できた・所見なし」とは別の結果として記録し、件数を画面に出す
-- 「診断できた」以外の記録は、次のスキャンで必ずやり直す
-- 検出した文字を表示するときはマスクし（`**** **** **** 4242`）、記録には本文を残さない（種類・危険度・位置だけを保存する）
-
-### 3. 設計の規律を機械で守る
-
-クリーン3層 + swift-dependencies による DI。厳格なのは**依存の向き**と**注入点**の2つだけで、どちらも人の注意ではなく機械で検査する。
-
-- 層違反・注入点違反・Policy の純粋性 → `.swiftlint.yml` の custom_rules
-- DI の3値（live / preview / test）・登録漏れ・live に Stub を置いていないか → `scripts/arch-check.sh`
-- 同じ検査とテストを CI で実行（テストは 169 件。Vision を本物で回す2スイートは CI のランナーで固まるので、ローカルで回す）
-
-**機械検査は万能ではない。** lint のルールは正規表現の文字一致なので、すり抜ける書き方がある。
-
-- 「Features から Infrastructure の具象を参照しない」は具象の名前を手で並べたリストで、実装を足したときに追加し忘れた型は通る
-- `typealias` を挟んだ参照や、文字列から型を作る書き方は見えない
-- ディレクトリ名を1文字間違えると、エラーにならず検査が黙って消える（下の「踏んだ罠」）
-
-検査が拾うのは「よくある踏み外し」までで、設計の妥当性そのものはレビューで見る。なぜこの構造にしたかは下の「アーキテクチャ」に書いた。
-
-## AI との開発
-
-設計の議論と実装は Claude と進めている。採用した構造は、理由を自分で説明できるものだけを残している（「なぜ UseCase を protocol にしないか」など、下に書いたとおり）。
-
-規約は AI にも機械で守らせる。CLAUDE.md に「該当する話題ではスキルを読む」と書くだけでは読み忘れを検知できなかったので、hooks で作業手順そのものを検査している。
-
-- 入力のトリガー語に対応するスキルが読まれていなければ、注意を差し込む
-- Swift を変更したのに検証手順を踏んでいない、View を変更したのに SwiftUI のレビューをしていないコミットは止める
-
-非常用の抜け道（環境変数で通す）は残してあるので、これも強制ではなく「忘れを減らす仕組み」という位置づけ。
-
-## 現在の状態
-
-| | 状態 |
-|---|---|
-| ホーム → 全量スキャン → 所見のある写真の一覧 → 写真詳細 | 動く。結果は記録し、2回目以降は新しい写真だけ診断する |
-| 検出する種類 | カード番号 / 認証情報 / 住所 / 電話番号 / 郵便番号 / メールアドレス / パスポート番号の書式 / 写り込みらしい顔（実機のみ） |
-| 速度（実機・iPhone 15 Pro Max・709 枚） | 1枚あたり約 155 ms |
-| 見つけた写真への対処（削除・非表示） | **未実装** |
-| マイナンバー・運転免許証の番号 | **未実装** |
-| アプリを離れても診断を続ける | 仕組みは入っているが、背景で GPU を使う entitlement が有料プログラムでないと付けられず、いまは前面のみ |
-| 実機の本物の写真での誤検出の確認 | **未確認**（判定の実測は合成画像） |
-| 顔検出が失敗したときの区別 | **未対応**（いまは「検出ゼロ」として扱う） |
-
-詳しい内訳は末尾の「現在の実装状況」。
-
-## ドキュメント
-
-- **プロダクトの方針・決定事項は [`docs/product-brief.md`](docs/product-brief.md) が原本**。作業前に必ず読む
-- **守るべきルールと作業手順は [`CLAUDE.md`](CLAUDE.md)**（機械検査つき）
-- ここから下は「**なぜその構造なのか**」の解説。ルールの一覧ではない
-
-## アーキテクチャ
-
-クリーン3層 + swift-dependencies による DI。[SwiftArchitectureSample](https://github.com/yosshi0127-ios/SwiftArchitectureSample) に基づく。
-
-```
-Features ──▶ Core ◀── Infrastructure
-                 ▲
-              App/DI      ← ここだけが両側を知り、結線する
-```
-
-厳格なのは**依存の向き**と**注入点**の2つだけで、それ以外は普通の MVVM + 軽い UseCase 層。
-
-| 層 | 中身 | 持てる依存 |
-|---|---|---|
-| `Core/Models` | ドメインの値型 | — |
-| `Core/Services` | 能力（〜する）の protocol | — |
-| `Core/Repositories` | 永続化（〜を覚える）の protocol | — |
-| `Core/Policy` | 判断（入力 → 結論）の純粋関数 | — |
-| `Infrastructure/` | protocol の実装。実 I/O | 実 I/O |
-| `Features/UseCases` | 段取り。具体 struct | `@Dependency`（**唯一の場所**） |
-| `Features/Screens/<画面>` の State | `@MainActor @Observable`。画面の状態 | UseCase のみ |
-| `Features/Screens/<画面>` の View | SwiftUI | なし（State を生成するだけ） |
-| `App/DI` | 依存の登録（3値） | 両側を知る |
-| `Support/Mocks` | Stub / Unimplemented | — |
-
-### Features の中の分け方
-
-```
-Features/
-  UseCases/          段取り。画面をまたいで共有する
-  Screens/
-    Home/            1画面 = 1ディレクトリ（State / View / その画面専用の部品）
-    FullScan/
-    FlaggedPhotos/
-    PhotoDetail/
-```
-
-機能名（Scan / Setting …）では切らず、**`UseCases` と `Screens` の2つだけで切る**。理由は3つ。
-
-- 機能の境界は揺れる。「権限がないときの画面は Scan 機能か」「設定は機能なのか」は決めても後から動くので、ディレクトリを作り直し続けることになる
-- **ディレクトリは何も強制しない。** 同一モジュールなので `Features/Scan/` を作っても隣の `Features/Setting/` から普通に参照できる。本当に境界を効かせたいなら SPM モジュールに切るしかない
-- ファイルを探すときの手がかりは「どの画面か」で、「どの機能か」ではない
-
-UseCase は**画面間では共有する**（`ScanImageUseCase` は診断ホームと1枚チェックの両方から呼ばれる）。`Core/Services` と `Core/Policy` はアプリ全体の共有物。
-
-「この処理はどこに置くか」で迷ったときの対応:
-
-| 迷い | 置き場所 |
-|---|---|
-| 2つの画面が同じ段取りを踏む | `UseCases/` の1本を両方から呼ぶ（コピーしない） |
-| 段取りの中に判断（危険か・どう数えるか）が混ざっている | 判断を `Core/Policy` に下げる |
-| 表示のための計算しかしていない | その画面の State |
-
-なお `@Dependency` を許可する lint の例外は **`UseCases?/` というパスの正規表現**でしかない。UseCase をこの名前以外のディレクトリに置くと `dependency_only_in_usecase` で落ちる。
-
-### `Core/` が Foundation しか import できない理由
-
-Core はドメインの言葉とルールだけを持つ。Apple のフレームワークが混ざると、そのルールを別環境（コマンドラインのツール、将来の別プラットフォーム）で動かせなくなる。
-
-具体的な帰結として、**CoreLocation も import できない**。だから緯度経度は独自の `GeoCoordinate` を定義し、`CLLocation` からの変換は Infrastructure の1箇所に閉じる。座標系のバグを型で殺すのが目的で、`Region`（左上原点・0...1 正規化）も同じ発想。
-
-同じ理由で、Core の protocol に `@MainActor` を書かない。隔離は**実装側の都合**であって契約ではない。
-
-### 判断は Policy、実行は UseCase
-
-「危険かどうか」「どの順で処理するか」といった判断は、I/O を持たない純粋関数として `Core/Policy` に置く。フレームワークを起動せずに全網羅テストできることが Policy の価値。
-
-対して UseCase は**順序だけ**を持つ。たとえば `ScanLibraryMetadataUseCase` は「権限を確かめ → 列挙し → Policy に集計させる」という順番の知識しか持たず、数え方も判定基準も持たない。UseCase の行数が少ないのは正しい状態。
-
-### 依存の追加は3点セット
-
-```
-Core の protocol → Infrastructure の実装 → App/DI/DependencyValues+<名前>.swift（3値）
-```
-
-3つ揃っていないと `scripts/arch-check.sh` が落ちる。実装名は「**具体技術 + protocol 名**」（例: `PhotoKitPhotoLibraryService`）。能力の名前に技術を入れない — PhotoKit をやめても Core の型名が変わらないようにするため。
-
-### DI の3値
-
-| 実行文脈 | 解決される値 | 中身 |
-|---|---|---|
-| アプリ実行 | `liveValue` | 本番実装 |
-| Xcode Preview | `previewValue` | Stub（決定的な固定データ） |
-| テスト | `testValue` | Unimplemented（呼ばれたら `fatalError`） |
-
-`testValue` がクラッシュするのは意図的。テストで `withDependencies` の上書きを忘れたとき、**静かに本物を呼ぶ事故**を防ぐ。落ちれば必ず気づく。
-
-`previewValue` は「副作用ゼロ」だけでなく「**Preview の見た目が成立する値**」であること。`StubPhotoLibraryService` が 1,240 枚の固定データを返すのは、4桁の数字が入る画面のレイアウトを確認するため。乱数と現在時刻は使わない（Preview が毎回変わると信頼できない道具になる）。
-
-### なぜ UseCase を protocol にしないか
-
-差し替える必要がないから。差し替え境界（I/O）は既に protocol 化されていて、テストは `withDependencies` で**中の依存**を差し替えて本物の UseCase を検証する。UseCase は「差し替える対象」ではなく「テストされる対象」。
-
-DIP は「差し替えが要る境界」を抽象化する原則であって、全部を protocol にすることではない。
-
-## テスト方針
-
-| 対象 | 書き方 |
-|---|---|
-| Policy | ただの関数テスト。`withDependencies` も非同期も不要 |
-| UseCase | `withDependencies` で Spy を挿し、**呼ばれた回数と順序**を検証 |
-| liveValue | `LiveDependenciesSmokeTests` で解決できることと型を固定 |
-
-### `@Dependency` は「生成時点」の文脈を捕捉する
-
-そのため、テストでは対象を **`withDependencies` の中で生成する**。
-
-```swift
-let outcome = await withDependencies {
-    $0.photoLibrary = spy
-} operation: {
-    let useCase = ScanLibraryMetadataUseCase()   // ← 必ずこの中
-    return await useCase()
-}
-```
-
-外で生成すると Unimplemented を掴んだままになり落ちる。
-
-### Spy は actor で書く
-
-呼び出し回数という可変状態を持つのに protocol は `Sendable` を要求する。`final class` + `@unchecked Sendable` + ロックでも書けるが、**隔離をコンパイラに任せられる** `actor` を採る。Core の protocol のメソッドを全部 `async` にしてあるので、actor が要件を満たせる。
-
-### liveValue はテストで踏まれない
-
-`previewValue` / `testValue` は Preview とテストが毎回踏むので壊れれば気づくが、`liveValue` は誰も踏まない。「live にうっかり Stub を登録した」事故を捕まえるために、静的検査（`arch-check.sh` が右辺の型名を見る）と実行時検査（`LiveDependenciesSmokeTests`）の両方を置いている。
+| 分類 | 使用技術 |
+|------|---------|
+| 言語・ビルド | Swift 6 / Xcode（iOS 26 SDK）/ Swift Package Manager |
+| 対応 OS | iOS 26.0 以上 |
+| UI | SwiftUI / Observation（`@Observable`）/ PhotosUI（PhotosPicker） |
+| 文字認識・顔検出 | Vision |
+| 写真の取得 | PhotoKit |
+| 端末保存 | SwiftData |
+| バックグラウンド | BackgroundTasks（`BGContinuedProcessingTask`） |
+| 回線の判定 | Network（`NWPathMonitor`） |
+| DI | swift-dependencies 1.17 |
+| テスト | Swift Testing（単体テスト）/ XCTest（UI テスト） |
+| 規約の検査 | SwiftLint（custom rules）/ シェルスクリプト / GitHub Actions |
 
 ## ビルドとテスト
 
-プロジェクトは **`PhotoDock/PhotoDock.xcodeproj`（repo ルートの1段下）**、ソースは隣の `PhotoDock/PhotoDock/`。repo ルートから叩くときは `-project` が必須。
+プロジェクトは `PhotoDock/PhotoDock.xcodeproj`（リポジトリのルートの1段下）にあります。Xcode で開くか、ルートで次のコマンドを実行します。
 
-```bash
+```sh
+# ビルド
 xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+
+# テスト（単体テスト 169 件 + UI テスト 2 件）
 xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 ```
 
-destination を iOS 26.2 に固定しているのは、deployment target が 26.0 で、手元にある最も低い iOS 26 ランタイムが 26.2 だから（**最低ラインで検証する**）。Xcode の ⌘U はツールバーで選んだ実行先を使うので、コミット前は CLI で一度確認する。
+API キーなどの設定は要りません。シミュレータでも文字の検出は動きます。顔の検出は実機でしか動きません。
 
-規約の機械検査（CI でも同じものが走る）:
+### 規約の機械検査
 
-```bash
-swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違反あり
+```sh
+swiftlint lint --strict --quiet && scripts/arch-check.sh   # 終了コードが 0 以外なら違反あり
 ```
 
-- `.swiftlint.yml` の custom_rules … 層違反・注入点違反・Policy の純粋性（スタイルルールは無効）
-- `scripts/arch-check.sh` … DI 3値・1依存1ファイル・protocol の登録漏れ・liveValue が本番実装
+| 検査 | 見ていること |
+|------|-------------|
+| `.swiftlint.yml` の custom rules | 層の違反・注入点の違反・Policy の純粋性（スタイルのルールは無効） |
+| `scripts/arch-check.sh` | DI の3値・1依存1ファイル・protocol の登録漏れ・live に本番実装を登録しているか |
 
-コードの規約だけでなく **Claude の作業手順**も機械で見る（`.claude/settings.json` の hooks）。CLAUDE.md のスキルカタログは「該当する話題では Skill を読む」と書いてあるだけで、読み忘れを誰も検知できなかった。
+同じ検査とテストを CI（GitHub Actions）でも実行します。Vision を本物で回す2つのテストスイートは、CI のランナーでは固まるので除外し、ローカルで回します。
 
-- `scripts/skill-sensor.sh`（UserPromptSubmit）… 入力のトリガー語に対応するスキルが、この文脈（直近の compaction 以降）で読まれていなければ注意を注入する。トランスクリプト（JSONL）の `Skill` tool_use を jq で数える
-- `scripts/commit-gate.sh`（PreToolUse）… `git commit` の前に「最後の Swift 編集より後に `verify`」「最後の View 編集より後に `swiftui-pro`」が読まれているかをトランスクリプトの出現順で判定し、抜けていれば止める。以前の「レビューしたら `SWIFTUI_REVIEWED=1` を付けて再実行」という手動申告を置き換えた
+## ディレクトリ構成
 
-発想は Android 研修プロジェクトの hooks（キーワード → スキル → トランスクリプトで既読判定）から。
+```
+PhotoDock/
+├── README.md               … このファイル
+├── CLAUDE.md               … 守るべきルールと作業手順
+├── .swiftlint.yml          … 規約の検査（custom rules）
+├── .claude/                … AI 向けのスキルと hooks の設定
+├── .github/workflows/      … CI
+├── scripts/                … 規約の検査と hooks のスクリプト
+├── docs/
+│   ├── product-brief.md    … プロダクトの方針・決定事項（原本）
+│   ├── architecture.md     … アーキテクチャと設計の理由
+│   ├── pitfalls.md         … 踏んだ罠
+│   ├── development-with-ai.md … AI との開発と、機械検査
+│   └── images/             … README 用のスクリーンショット
+└── PhotoDock/
+    ├── PhotoDock.xcodeproj
+    ├── PhotoDock/          … アプリ本体
+    │   ├── App/            … 起動と DI の登録
+    │   ├── Core/           … Models / Services / Repositories / Policy
+    │   ├── Features/       … Screens / UseCases
+    │   ├── Infrastructure/ … PhotoKit・Vision・SwiftData などの実装
+    │   └── Support/        … Mocks（Stub・Unimplemented）/ Extensions
+    ├── PhotoDockTests/     … 単体テスト
+    └── PhotoDockUITests/   … UI テスト
+```
 
-ビルド設定: iOS 26.0（2026-09-12 に 18.0 から引き上げ。理由は brief の「設計方針」）/ Swift 6.0 / `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` / iPhone は縦向き固定。Info.plist は `PhotoDock/PhotoDock/Info.plist`（`BGTaskSchedulerPermittedIdentifiers` だけ。他のキーは `INFOPLIST_KEY_*` で生成し、ビルド時に合成される）。
+## ドキュメント
 
-## 踏んだ罠（同じ穴を掘らないために）
+- [プロダクトの方針・決定事項](docs/product-brief.md)（原本。作業の前に読む）
+- [アーキテクチャと設計の理由](docs/architecture.md)
+- [踏んだ罠](docs/pitfalls.md)
+- [AI との開発と、機械検査](docs/development-with-ai.md)
+- [守るべきルールと作業手順](CLAUDE.md)
 
-**SourceKit の diagnostics は誤検知が多い。** `Cannot find type ...` や `No such module 'Dependencies'` が同一モジュール内の型に対して頻繁に出る。**真実は xcodebuild の結果だけ**。
+## 既知の課題
 
-**逆に「通常ビルドとテストは通るのに Preview だけ壊れる」書き方がある。** Preview は `__designTimeSelection` を挟むコード変換を行うので、そこで曖昧さが出ると Preview のビルドだけが失敗する。**`xcodebuild test` が green でも気づけない**ので、View を触ったら Preview を描画して確認する。
+主なものを挙げます。経緯と方針は [プロダクトの方針](docs/product-brief.md) にあります。
 
-| 壊れる書き方 | 直し方 |
-|---|---|
-| `case let .loaded(.scanned(access, inventory))` | associated value のラベルを省略しない |
-| `Button("ラベル", action: メソッド名)` | `Button("ラベル") { メソッド名() }` とクロージャで包む |
-
-**ユニットテストはホストアプリのプロセスで動く。** `TEST_HOST` が指定されているので、テスト実行時にアプリが普通に起動し、`WindowGroup` の中身が組まれ、View の `.task` が発火する。そこで依存を触るとテスト文脈なので `testValue`（Unimplemented）を踏み、**テストが1件も走る前にプロセスごと死ぬ**。対策として `PhotoDockApp` はユニットテスト時に画面を組まない（`NSClassFromString("XCTestCase")` で判定）。UI テストは別プロセスから起動するので該当しない。
-
-**ディレクトリ名が規約のアンカーになっている。** `.swiftlint.yml` と `arch-check.sh` はパスの正規表現・実パスでルールを引くので、名前が1文字違うと**エラーではなく沈黙で検査が消える**。`Core/Services`・`Core/Policy`・`Features/`・`App/DI` は実際にこの綴りでないと引っかからない（`UseCases?` だけは単複どちらでも通るようにしてある）。加えて macOS は大文字小文字を区別しないので、`APP/DI` のような誤りは**ローカルでは通り Linux の CI だけ落ちる**（git のインデックス側の case も `git rm --cached -f` で直す必要がある）。
-
-**`nonisolated async` は呼び出し元の隔離を引き継ぐ → 重い実装には `@concurrent` を付ける。** `SWIFT_APPROACHABLE_CONCURRENCY = YES`（Swift 6.2 の `NonisolatedNonsendingByDefault`）のため、`@MainActor` の State から `await` したサービスのメソッドは**メインスレッドで走る**。以前の Swift は自動でグローバルエグゼキュータへ退避していたので、挙動が逆転している。
-
-実測で確認した事実（`pthread_main_np()` でログ）:
-
-| 実装 | 実行スレッド |
-|---|---|
-| `func fetchAllAssetMetadata() async` | **main**（数万枚の列挙が UI を塞ぐ） |
-| `@concurrent func fetchAllAssetMetadata() async` | main 以外 |
-
-`@concurrent` を付けた実装は `nonisolated async` の protocol 要件を問題なく満たす（Core の protocol に隔離を書けない恒常ルール3と両立する）。
-
-**運用ルール: 重い同期処理を含むサービス実装のメソッドにだけ `@concurrent` を付ける。** 安いメソッド（`currentAccess()` のような即答する読み取り）には付けない — 不要なスレッド跳躍を減らすことが Swift 6.2 のこの変更の目的なので、全部に付けると台無しになる。第2段で増える `pixelSource` / `ocr` / `codes` はいずれも重い側。
-
-なお `Thread.isMainThread` と `Thread.current` は Swift 6 の async 文脈では使用禁止（タスクがスレッドを移りうるため意味が曖昧になる）。計測には `pthread_main_np()` を使う。
-
-**`addTaskUnlessCancelled` は親タスクのキャンセルでは追加を拒否しない。** `AsyncStream` + `TaskGroup` で「N 並列を保ちながら完了順に流す」形を書くとき、消費側の離脱で処理を止めるには**自分で `Task.isCancelled` を見て `break` する**必要がある。
-
-実測（200枚を2並列、5枚読んで離脱）:
-
-| 補充の書き方 | 離脱後 |
-|---|---|
-| `group.addTask` | **200枚すべて処理**（止まらない） |
-| `group.addTaskUnlessCancelled` | **50枚以上処理して増え続ける**（うち44枚はキャンセル済みで開始） |
-| `if Task.isCancelled { break }` | **8枚で停止**（待っても増えない） |
-
-子タスクには `Task.isCancelled == true` が伝播しているのに、グループへの追加は通る。`Task.sleep` はキャンセルで即座に返るので、**キャンセル後ほど速く回って被害が大きくなる**。テストの Spy も `Task.sleep` を使うと「止まった」と「速く走り切った」を区別できないので、待ち切る実装にしてある。
-
-**Vision の顔検出はシミュレータで動かない**（`Could not create inference context` / code 9）。環境依存の検出器は「検出ゼロで続行」に設計する。
-
-**Foundation Models（オンデバイス LLM）もシミュレータで動かない。しかも `availability` は `.available` と嘘をつく。** 実際に `respond` すると safety モデル（`com.apple.fm.language.instruct_300m.safety`）が見つからず `GenerationError` になる。macOS 26.5 実機では動く。availability の確認だけでなく、呼び出しの失敗も握って続行する設計が要る。
-
-**フォルダ同期グループの中に Info.plist を置くと「Multiple commands produce Info.plist」で落ちる。** Xcode 16 以降の同期グループはフォルダ内の全ファイルをターゲットに入れるので、`INFOPLIST_FILE` に指定した plist が Copy Bundle Resources にも入って衝突する。Xcode が GUI で plist を作るときと同じく、pbxproj に `PBXFileSystemSynchronizedBuildFileExceptionSet`（`membershipExceptions = (Info.plist)`）を足して除外する。
-
-**View の `.task` は子画面を push しただけでキャンセルされる。** NavigationStack で詳細を開くと親の `onDisappear` が呼ばれ、`.task` も止まる。数十分かかる診断をここに乗せると、写真詳細を開いた瞬間に止まる。State が自前の `Task` を持ち、View は `onAppear` から同期で始めるだけにする。さらに、View がその Task の終わりを `await` すると State を掴み続けて画面を閉じても捨てられないので、開始は同期で返し、終わりを待ちたいテストは `waitUntilSettled()` を使う。
-
-**`@MainActor` クラスの `deinit` は nonisolated なので、隔離された stored property に触れない**（`scanTask?.cancel()` が「main actor-isolated property can not be referenced from a nonisolated context」）。`isolated deinit`（Swift 6.1 / iOS 18.4+）にすると触れる。あわせて、Task が `self` を強く持つと deinit が来ないので、ループ内の `self` は弱参照にする。
-
-**`BGTask` は Sendable でないので actor から actor へ渡せない**（「sending 'task' risks causing data races」）。OS の launch handler から受け取る1箇所だけ `nonisolated(unsafe) let` で送り、以後は1つの actor の中に閉じ込めて外とは ID だけをやり取りする。なお `BGContinuedProcessingTask` の launch handler 登録は「起動完了前に」の縛りから除外されている（SDK ヘッダに明記）ので、Infrastructure の中で最初の申告時に登録できる。
-
-**GitHub の macOS ランナーでは Vision が返ってこず、テストプロセス全体が固まる。** GPU の無い VM 上のシミュレータで `VNRecognizeTextRequest` を実行すると完了せず、同期の `perform` が Swift 並行処理の協調スレッド（ランナーは数本）を全部塞ぐ。Policy のような一瞬で終わるテストまで 1 件も完了せず、6 時間の上限で打ち切られる（2026-09-10 / 09-11 の run）。**Vision を本物で回す 2 スイート（`VisionOCRServiceTests` / `StubPixelSourceServiceTests`）は CI では `-skip-testing` で外し、ローカルで回す。** macOS ジョブには `timeout-minutes` を付けて固まっても 30 分で落とす。
-
-**Vision の文字認識はバックグラウンドで GPU を使えず止まる。compute device の指定では回避できない。** 背景では `IOGPUMetalError: Insufficient Permission (to submit GPU work from background)` になる。`setComputeDevice(_:for:)` で Neural Engine / CPU を選んでも、前処理が Metal を使うので同じ。UIKit の背景猶予（約30秒）が切れた瞬間に詰まり、進捗ゼロが45秒続くと dasd が `marking stalled` → BGContinuedProcessingTask を打ち切る。理由はアプリ側のログに出ない — **Console.app で `dasd` プロセスを見る**。正解は entitlement「Background GPU Access」+ `requiredResources = .gpu` だが、**個人の開発チームでは provisioning が拒否される**（有料プログラムが必要）。いまは `.gpu` を要求して拒否されたら継続しない。
-
-**actor のメソッド内で作った普通のクロージャは「その actor に隔離」と推論される。OS のコールバックに渡すと実機で落ちる**（「Incorrect actor executor assumption; expected '...Service' executor」）。ObjC から来る `(BGTask) -> Void` や `expirationHandler: (() -> Void)?` は `@Sendable` が付いていないので、この推論が黙って働く。コンパイルは通り、OS が自分のキューから呼んだ瞬間に実行時チェックで落ちる。**OS に渡すクロージャには `@Sendable` を明示**し、actor に触るのは中で `Task { await self... }` を挟む。
-
-## 現在の実装状況
-
-**ホーム → 全量スキャン（進捗） → 所見のある写真グリッド → 写真詳細（枠 + 所見リスト）まで一本の線で繋がっている。** 結果は SwiftData に記録され、2回目以降は新しい写真だけ診断する。写真詳細を開いている間も診断は続く。アプリを離れても続ける仕組み（`BGContinuedProcessingTask`）は入っているが、**背景で GPU を使う entitlement が個人チームでは付けられないため、いまは申告が拒否されて前面のみ**（有料プログラム加入後に自動で有効になる）。
-
-依存は7本、いずれも3点セット + live スモークで担保:
-
-| 依存 | 役割 | 段 |
-|---|---|---|
-| `photoLibrary` | メタデータ全件列挙 + 権限 | 第1段 |
-| `pixelSource` | 画像バイト列（iCloud 判定込み）+ 一覧用サムネイル | 第2段 |
-| `ocr` | 文字認識（座標変換込み）。前段に文字矩形の検出を置き、文字のない写真では OCR を省く。**読めなかったときは空配列ではなく失敗を返す**（「文字が無かった」と混ぜると、見ていない写真が診断済み・所見なしとして記録される） | 第2段 |
-| `faceDetection` | 顔の位置と向き（写り込み判定の入力）。**シミュレータでは検出ゼロで続行** | 第2段 |
-| `scanRecords` | スキャン済み記録の保存（SwiftData）。所見ゼロも記録し、2回目以降は新しい写真だけ診断する | 第2段 |
-| `network` | いま通信してよい回線か（Wi-Fi・低データモードでない）。iCloud の写真を取り寄せる前に1回だけ見る | 第2段 |
-| `continuedProcessing` | 前面で始めた診断をアプリを離れても続けたいと OS に申告する（`BGContinuedProcessingTask`）。診断する写真があるときだけ申告し、1枚ごとに進捗を報告。背景の GPU（`.gpu`）を要求し、**拒否されたら nil を返して診断は前面だけで続く**（Vision が背景で GPU 無しでは止まるため） | 第2段 |
-
-- Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanSummaryPolicy`（第2段の逐次集計）
-- UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す。診断する写真があれば OS に継続を申告し、1枚ごとに進捗を報告）/ `LoadThumbnailUseCase`
-- 画面4つ: 診断ホーム / 全量スキャン（**精密のみ**。実機でクイックの 1.63 倍で済むためプリセットは出さない） / 所見のある写真グリッド / 写真詳細（一覧からは**記録を表示するだけで再検査しない**。PhotosPicker の1枚だけ精密で診断）
-- 保存: `SwiftDataScanRecordRepository`。所見ゼロも「スキャン済み」として記録し、2回目以降は新しい写真の分だけ診断する。本文（マスク済み文字列）は保存しない
-- ユニットテスト169件。座標変換は合成画像を本物の Vision に通して固定してある
-- 実測（シミュレータ・162枚）: 並列化は効かない（1→2 で 7%、8 で破綻）。OCR の前段で 3.1 倍速。詳細は brief
-
-**残り: 顔検出の失敗を「検出ゼロ」と区別する / 対処（削除・非表示）/ 経路チップ / Foundation Models による credential の意味判定（実機のみ）。** 写り込み顔の閾値は仮置きで、実機のカメラロールで調整する。バックグラウンド継続は有料プログラム加入後に entitlement「Background GPU Access」を付けて有効化する（`UIBackgroundModes` は不要だった）。
+- 見つけた写真への対処（削除・非表示）は、まだ実装していません
+- マイナンバーと運転免許証の番号は、まだ検出できません
+- 判定の実測は合成画像で行っており、実機の本物の写真での誤検出は確認できていません
+- アプリを離れると診断が止まります。続ける仕組みは入っていますが、背景で GPU を使うための entitlement が有料の開発者プログラムでないと付けられません
+- 顔の検出が失敗しても「顔が無かった」と区別できません
+- セキュリティコードとつながって読まれたカード番号（`4242424242424242123`）は拾えません。切る位置の手がかりが無いためです
