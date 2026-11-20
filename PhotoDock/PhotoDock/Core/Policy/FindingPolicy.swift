@@ -94,10 +94,10 @@ struct FindingPolicy: Sendable {
         // 値の書式はラベルより確実なので先に試す
         if hasCredentialValue(text) { return (.credential, .danger) }
         if let severity = credentialLabelSeverity(in: text) { return (.credential, severity) }
-        if text.contains(/\b[A-Z]{2}[0-9]{7}\b/) { return (.identityDocumentNumber, .caution) }
+        if identityDocumentNumberRange(in: text) != nil { return (.identityDocumentNumber, .caution) }
         if text.contains(emailPattern) { return (.email, .caution) }
         if hasAddress(text) { return (.address, .caution) }
-        if hasPhoneNumber(text) { return (.phoneNumber, .caution) }
+        if phoneNumberRange(in: text) != nil { return (.phoneNumber, .caution) }
         if hasPostalCode(text) { return (.postalCode, .caution) }
 
         return nil
@@ -413,11 +413,25 @@ struct FindingPolicy: Sendable {
     /// - 固定電話とフリーダイヤル: ハイフン区切りで**合計がちょうど10桁**
     ///   （`03-1234-5678` / `0426-12-3456` / `0120-123-456`）。桁数を見ないと
     ///   「月-日-年」の日付（`01-02-2026`）が電話番号になる
-    private func hasPhoneNumber(_ text: String) -> Bool {
-        if text.contains(/(?:^|[^0-9-])0[5789]0-?[0-9]{4}-?[0-9]{4}(?![0-9]|-[0-9])/) { return true }
+    ///
+    /// 番号の範囲を返す（マスクで番号そのものの末尾だけを残すため）。
+    /// 1行に複数あるときは、最初に出てくる番号。
+    private func phoneNumberRange(in text: String) -> Range<String.Index>? {
+        let mobile = text.firstMatch(of: /(?:^|[^0-9-])(0[5789]0-?[0-9]{4}-?[0-9]{4})(?![0-9]|-[0-9])/)
+            .map(\.output.1)
+        let landline = text.matches(of: /(?:^|[^0-9-])(0[0-9]{1,3}-[0-9]{2,4}-[0-9]{3,4})(?![0-9]|-[0-9])/)
+            .map(\.output.1)
+            .first { $0.count { $0 != "-" } == rules.landlinePhoneDigits }
 
-        return text.matches(of: /(?:^|[^0-9-])(0[0-9]{1,3}-[0-9]{2,4}-[0-9]{3,4})(?![0-9]|-[0-9])/)
-            .contains { $0.output.1.count { $0 != "-" } == rules.landlinePhoneDigits }
+        return [mobile, landline]
+            .compactMap { $0 }
+            .min { $0.startIndex < $1.startIndex }
+            .map { $0.startIndex..<$0.endIndex }
+    }
+
+    /// パスポート番号の書式（英字2 + 数字7）の範囲
+    private func identityDocumentNumberRange(in text: String) -> Range<String.Index>? {
+        text.firstMatch(of: /\b[A-Z]{2}[0-9]{7}\b/)?.range
     }
 
     /// `123-4567` の形。ただし、もっと長い数字の並びの一部であるときは郵便番号にしない
@@ -446,8 +460,10 @@ struct FindingPolicy: Sendable {
             maskedDigits(text, keepingTrailing: 0)
         case .cardNumber:
             maskedCardNumber(text)
-        case .identityDocumentNumber, .phoneNumber:
-            maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        case .identityDocumentNumber:
+            maskedDigits(text, keepingTailOf: identityDocumentNumberRange(in: text))
+        case .phoneNumber:
+            maskedDigits(text, keepingTailOf: phoneNumberRange(in: text))
         case .bystanderFace:
             text   // 顔は文字を持たない。ここに来ることはないが網羅のために置く
         }
@@ -465,9 +481,30 @@ struct FindingPolicy: Sendable {
             return maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
         }
 
-        let kept = Set(match.digitOffsets.suffix(rules.maskedTrailingDigits))
+        return maskedDigits(text, keeping: Set(match.digitOffsets.suffix(rules.maskedTrailingDigits)))
+    }
 
-        return String(text.enumerated().map { offset, character -> Character in
+    /// 番号の範囲の中にある数字の末尾だけを残し、同じ行の他の数字はすべて伏せる
+    /// （`TEL 03-1234-5678 内線 123` → `TEL **-****-5678 内線 ***`）。
+    /// 行の末尾を残すと、番号の後ろに内線や時刻があるとき、残る数字がそちらに移る。
+    /// 番号が見つからない文字列は、行の末尾を残す。
+    private func maskedDigits(_ text: String, keepingTailOf range: Range<String.Index>?) -> String {
+        guard let range else {
+            return maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        }
+
+        let offsets = text.distance(from: text.startIndex, to: range.lowerBound)
+            ..< text.distance(from: text.startIndex, to: range.upperBound)
+        let digitOffsets = text.enumerated()
+            .filter { offsets.contains($0.offset) && Self.isMaskableDigit($0.element) }
+            .map(\.offset)
+
+        return maskedDigits(text, keeping: Set(digitOffsets.suffix(rules.maskedTrailingDigits)))
+    }
+
+    /// 指定した位置（行の何文字目か）の数字だけを残し、他の数字を伏せる
+    private func maskedDigits(_ text: String, keeping kept: Set<Int>) -> String {
+        String(text.enumerated().map { offset, character -> Character in
             Self.isMaskableDigit(character) && !kept.contains(offset) ? "*" : character
         })
     }

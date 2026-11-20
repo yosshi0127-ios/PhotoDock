@@ -694,6 +694,49 @@ struct FindingPolicyTests {
         #expect(sut.masked("090-1234-5678", as: .phoneNumber) == "***-****-5678")
     }
 
+    /// 残すのは行の末尾ではなく、電話番号そのものの末尾4桁
+    @Test("電話番号の隣に別の数字があっても、番号の末尾4桁だけを残す", arguments: [
+        ("TEL 03-1234-5678 内線 123", "TEL **-****-5678 内線 ***"),
+        ("03-1234-5678 受付 9:00-18:00", "**-****-5678 受付 *:**-**:**"),
+        ("2026年11月20日 090-1234-5678", "****年**月**日 ***-****-5678"),     // 前に日付
+        ("08012345678 (2回目)", "*******5678 (*回目)"),                      // ハイフンなし
+        ("フリーダイヤル 0120-123-456 24時間", "フリーダイヤル ****-**3-456 **時間"),
+        ("渋谷区役所 03-1234-5678 3階", "渋谷区役所 **-****-5678 *階")
+    ])
+    func maskedPhoneNumberKeepsNumberTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .phoneNumber) == expected)
+    }
+
+    @Test("1行に電話番号が2つあるときは、最初の番号の末尾4桁だけを残す", arguments: [
+        ("03-1234-5678 / 090-1234-5678", "**-****-5678 / ***-****-****"),
+        ("090-1234-5678 / 03-1234-5679", "***-****-5678 / **-****-****")
+    ])
+    func maskedPhoneNumberWithTwoNumbers(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .phoneNumber) == expected)
+    }
+
+    @Test("電話番号が見つからない文字列は、行の末尾4桁を残す")
+    func maskedPhoneNumberFallsBackToLineTail() {
+        #expect(sut.masked("1234 5678", as: .phoneNumber) == "**** 5678")
+    }
+
+    @Test("身分証番号は番号そのものの末尾4桁だけを残す", arguments: [
+        ("AB1234567", "AB***4567"),
+        ("AB1234567 2030-01-15", "AB***4567 ****-**-**"),
+        ("旅券番号 AB1234567 発行 2020年1月15日", "旅券番号 AB***4567 発行 ****年*月**日"),
+        ("2030-01-15 AB1234567", "****-**-** AB***4567")
+    ])
+    func maskedIdentityDocumentNumberKeepsNumberTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .identityDocumentNumber) == expected)
+    }
+
+    @Test("電話番号のマスクは findings まで引き継がれる")
+    func phoneNumberMaskReachesFindings() {
+        let texts = [RecognizedText(text: "TEL 03-1234-5678 内線 123", confidence: 1, region: .test)]
+
+        #expect(sut.findings(in: texts).first?.maskedText == "TEL **-****-5678 内線 ***")
+    }
+
     /// 住所は番地を全部伏せる。漢字は残るので「どこの住所か」の識別はできる
     @Test("住所は数字を全部伏せる")
     func maskedAddress() {
