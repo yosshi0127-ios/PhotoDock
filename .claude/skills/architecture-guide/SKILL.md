@@ -74,4 +74,4 @@ AppState が UserDefaults を直接触るのは NG。値の公開＝AppState、�
 
 ## 深掘りが必要なとき
 
-このリポジトリの `README.md`（アーキ全体像・DI 設計・テスト方針）を読む。設計判断の経緯は git log のコミットメッセージに残っている。
+このリポジトリの `docs/architecture.md`（アーキ全体像・DI 設計・テスト方針）を読む。設計判断の経緯は git log のコミットメッセージに残っている。
