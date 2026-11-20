@@ -98,7 +98,7 @@ struct FindingPolicy: Sendable {
         if text.contains(emailPattern) { return (.email, .caution) }
         if hasAddress(text) { return (.address, .caution) }
         if hasPhoneNumber(text) { return (.phoneNumber, .caution) }
-        if text.contains(/[0-9]{3}-[0-9]{4}/) { return (.postalCode, .caution) }
+        if hasPostalCode(text) { return (.postalCode, .caution) }
 
         return nil
     }
@@ -359,6 +359,16 @@ struct FindingPolicy: Sendable {
     private func hasPhoneNumber(_ text: String) -> Bool {
         text.contains(/0[789]0-?[0-9]{4}-?[0-9]{4}/)
             || text.contains(/0[0-9]{1,3}-[0-9]{2,4}-[0-9]{4}/)
+    }
+
+    /// `123-4567` の形。ただし、もっと長い数字の並びの一部であるときは郵便番号にしない
+    /// （`注文番号 20261119-00123` の `119-0012`、`1234-5678-9012` の `234-5678`）。
+    /// 直前が数字かハイフン、直後が数字か「ハイフン + 数字」なら、長い並びの途中とみなす。
+    ///
+    /// 直前の英字は除外しない。OCR が `〒` を `T` と読むことがあり、
+    /// 英字を条件に入れると `T150-0041` を見逃す（代わりに `A123-4567` のような型番は拾う）
+    private func hasPostalCode(_ text: String) -> Bool {
+        text.contains(/(?:^|[^0-9-])[0-9]{3}-[0-9]{4}(?![0-9]|-[0-9])/)
     }
 
     // MARK: - マスク
