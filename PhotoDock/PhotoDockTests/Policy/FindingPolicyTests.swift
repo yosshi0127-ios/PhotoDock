@@ -87,6 +87,42 @@ struct FindingPolicyTests {
     }
 
     /// どれも Luhn は通る。番号帯か桁数がブランドの割り当てに合わない
+    /// OCR が番号と有効期限の間の空白を落とした行（実測で出た形）
+    @Test("有効期限とつながったカード番号を拾う", arguments: [
+        "5555 5555 5555 444408/27",
+        "No.401288888888188112/28",
+        "353011133330000012/2028",          // 年が4桁
+        "411111111111111101/30",
+        "3782 822463 1000511/29",           // American Express
+        "カード番号4242424242424242有効期限 12/28"   // 期限は離れている（もともと拾える）
+    ])
+    func cardNumberJoinedWithExpiry(_ text: String) {
+        let match = sut.classify(text)
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .danger)
+    }
+
+    @Test("有効期限とつながったブランド不明の番号は要注意")
+    func unbrandedCardNumberJoinedWithExpiry() {
+        let match = sut.classify("1234 5678 1234 567012/28")
+        #expect(match?.kind == .cardNumber)
+        #expect(match?.severity == .caution)
+    }
+
+    @Test("末尾が有効期限の形でなければ切り離さない", arguments: [
+        "401288888888188113/28",        // 13月は無い
+        "401288888888188100/28",        // 00月は無い
+        "401288888888188112/2",         // 年が1桁
+        "401288888888188112/285",       // 年が3桁
+        "401288888888188112/20285",     // 年が5桁
+        "401288888888188112/ab",
+        "401288888888188112 /28",       // 番号と / の間に空白
+        "4012888888881881123"           // セキュリティコードとつながった19桁（切る手がかりが無い）
+    ])
+    func digitsNotFollowedByExpiryAreNotSplit(_ text: String) {
+        #expect(kind(of: text) != .cardNumber)
+    }
+
     @Test("Luhn が通ってもブランドの番号の形でなければカード番号にしない", arguments: [
         "4901234567894",        // 13桁・JAN コードの形（日本の商品バーコードは 45 / 49 で始まる）
         "411111111111116",      // Visa の番号帯だが15桁
@@ -621,6 +657,15 @@ struct FindingPolicyTests {
         ("1234 5678 1234 5670 12/28", "**** **** **** 5670 **/**")           // ブランド不明（要注意）
     ])
     func maskedCardNumberKeepsCardTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .cardNumber) == expected)
+    }
+
+    @Test("有効期限とつながったカード番号も、番号の末尾4桁だけを残す", arguments: [
+        ("5555 5555 5555 444408/27", "**** **** **** 4444**/**"),
+        ("No.401288888888188112/28", "No.************1881**/**"),
+        ("353011133330000012/2028", "************0000**/****")
+    ])
+    func maskedCardNumberJoinedWithExpiry(_ input: String, _ expected: String) {
         #expect(sut.masked(input, as: .cardNumber) == expected)
     }
 
