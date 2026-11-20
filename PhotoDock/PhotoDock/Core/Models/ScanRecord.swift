@@ -17,6 +17,8 @@ struct ScanRecord: Sendable, Equatable, Codable, Identifiable {
         /// ダウンロードを試したが iCloud 側にも実体が無かった
         case unavailableInCloud
         case missing
+        /// 画像は取れたが、文字を読む処理が失敗した。診断の事実ではないので次回やり直す
+        case failed
     }
 
     let assetID: String
@@ -53,6 +55,7 @@ extension ScanRecord {
         case .notAvailableLocally: .notAvailableLocally
         case .unavailableInCloud: .unavailableInCloud
         case .missing: .missing
+        case .failed: .failed
         }
     }
 }

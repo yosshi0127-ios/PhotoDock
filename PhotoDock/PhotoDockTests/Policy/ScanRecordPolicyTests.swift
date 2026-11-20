@@ -73,7 +73,8 @@ struct ScanRecordPolicyTests {
     @Test("取れなかった記録は毎回再挑戦する", arguments: [
         ScanRecord.Outcome.notAvailableLocally,
         ScanRecord.Outcome.unavailableInCloud,
-        ScanRecord.Outcome.missing
+        ScanRecord.Outcome.missing,
+        ScanRecord.Outcome.failed     // 文字を読めなかった。診断の事実ではないのでやり直す
     ])
     func unavailableOutcomeIsRetried(_ outcome: ScanRecord.Outcome) {
         #expect(sut.needsRescan(record: record(outcome: outcome), asset: asset(), quality: .quick, generation: generation))

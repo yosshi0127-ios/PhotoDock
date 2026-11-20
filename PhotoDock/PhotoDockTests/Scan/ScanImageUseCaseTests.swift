@@ -22,11 +22,24 @@ struct ScanImageUseCaseTests {
         RecognizedText(text: "こんにちは", confidence: 1, region: .test)
     ]
 
+    /// 診断できた場合の所見。失敗したらテストを落とす
     private func scan(
         ocr: SpyOCRService,
         faces: SpyFaceDetectionService = SpyFaceDetectionService(),
         quality: ScanQuality = .precise
     ) async -> [Finding] {
+        guard case let .scanned(findings) = await outcome(ocr: ocr, faces: faces, quality: quality) else {
+            Issue.record("診断できるはずの入力で failed が返った")
+            return []
+        }
+        return findings
+    }
+
+    private func outcome(
+        ocr: SpyOCRService,
+        faces: SpyFaceDetectionService = SpyFaceDetectionService(),
+        quality: ScanQuality = .precise
+    ) async -> ImageScanOutcome {
         await withDependencies {
             $0.ocr = ocr
             $0.faceDetection = faces
@@ -57,6 +70,26 @@ struct ScanImageUseCaseTests {
         let findings = await scan(ocr: SpyOCRService(texts: []))
 
         #expect(findings.isEmpty)
+    }
+
+    /// 「読めなかった」を「文字が無かった」に丸めると、見ていない写真が診断済みになる
+    @Test("OCR が失敗したら、所見0件ではなく failed を返す")
+    func failsWhenOCRFails() async {
+        let result = await outcome(ocr: SpyOCRService(outcome: .failed))
+
+        #expect(result == .failed)
+    }
+
+    /// 顔だけ見て「診断できた」にすると、文字を見ていない写真が記録に残る
+    @Test("OCR が失敗したら、顔が見つかっていても failed")
+    func failsEvenWhenFacesAreFound() async {
+        let faces = SpyFaceDetectionService(faces: [
+            DetectedFace(region: Region(x: 0.9, y: 0.05, width: 0.05, height: 0.06), yaw: nil)
+        ])
+
+        let result = await outcome(ocr: SpyOCRService(outcome: .failed), faces: faces)
+
+        #expect(result == .failed)
     }
 
     /// 無視する実装になっても「遅いだけ／精度が低いだけ」で正常に見えるため、渡され方を固定する

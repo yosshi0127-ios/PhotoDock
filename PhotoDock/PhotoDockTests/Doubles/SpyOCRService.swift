@@ -11,18 +11,23 @@ import Foundation
 /// 渡された `maxPixelSize` を残すのは、品質ノブが経路を通っていることを検証するため
 /// （無視する実装に書き換わっても「遅いだけ／精度が低いだけ」で正常に見えてしまう）。
 actor SpyOCRService: OCRService {
-    private let stubbedTexts: [RecognizedText]
+    private let stubbedOutcome: OCROutcome
 
     private(set) var callCount = 0
     private(set) var receivedMaxPixelSizes: [Int] = []
 
     init(texts: [RecognizedText] = []) {
-        self.stubbedTexts = texts
+        self.stubbedOutcome = .recognized(texts)
     }
 
-    func recognizeText(in data: Data, maxPixelSize: Int) async -> [RecognizedText] {
+    /// 読めなかった場合（`.failed`）を返させたいとき
+    init(outcome: OCROutcome) {
+        self.stubbedOutcome = outcome
+    }
+
+    func recognizeText(in data: Data, maxPixelSize: Int) async -> OCROutcome {
         callCount += 1
         receivedMaxPixelSizes.append(maxPixelSize)
-        return stubbedTexts
+        return stubbedOutcome
     }
 }

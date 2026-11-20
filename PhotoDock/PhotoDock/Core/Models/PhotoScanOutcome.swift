@@ -19,4 +19,7 @@ enum PhotoScanOutcome: Sendable, Equatable {
     case unavailableInCloud
     /// 見つからない・読めない
     case missing
+    /// 画像は取れたが、文字を読む処理が失敗した。所見の有無は分からないので
+    /// 「診断できた・0件」とは区別する（次回のスキャンでやり直す）
+    case failed
 }

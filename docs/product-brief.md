@@ -58,7 +58,11 @@
   - **背景では GPU が使えない**: `IOGPUMetalError: Insufficient Permission (to submit GPU work from background)`。**Vision の文字認識は推論の割り当て（`setComputeDevice` で Neural Engine / CPU を指定）を変えても前処理で Metal を使う**。UIKit の背景猶予（約30秒）が切れた瞬間に Metal 呼び出しが詰まり、以後 OCR が1枚も進まない。4回とも同じ経路で、経過 81〜130 秒で打ち切られた
   - 正解は entitlement「Background GPU Access」（`com.apple.developer.background-tasks.continued-processing.gpu`）+ `requiredResources = .gpu`。ただし **個人の開発チーム（無料）では provisioning が拒否される**（"Personal development teams do not support the Background GPU Access capability"）。有料の Apple Developer Program が必要
   - **決定（2026-09-14）: `.gpu` を要求し、submit が拒否されたら継続を申告しない**（前面だけで進む。安全側）。有料プログラム加入後に entitlement を付ければ、コード変更なしで背景の継続が有効になる。`usesCPUOnly`（非推奨）で Metal を避ける実験は未実施
-  - **未解決の懸念**: 背景で Vision が失敗したとき、`OCRService.recognizeText` は空配列を返すので「診断済み・所見なし」として記録に残りうる（見逃しが「安全」のお墨付きになる）。アプリを離れた直後の猶予 30 秒でも起きうる。OCR の失敗を outcome として区別し、記録せず次回再試行する形にする（次にやること）
+  - **未解決の懸念**: 背景で Vision が失敗したとき、`OCRService.recognizeText` は空配列を返すので「診断済み・所見なし」として記録に残りうる（見逃しが「安全」のお墨付きになる）。アプリを離れた直後の猶予 30 秒でも起きうる。→ **2026-11-20 対応**: OCR の結果を「読めた（0行もありうる）／失敗」に分け（`OCROutcome`）、失敗した写真は `failed` として扱う。当初案の「記録しない」ではなく **`failed` として記録する**（件数を画面に出すため。`ScanRecordPolicy` は「診断できた」以外を毎回やり直すので、次のスキャンで再試行される点は同じ）
+    - 失敗とするのは「画像として復号できない」と「Vision がエラーを返した」。文字の矩形が無い写真は今までどおり「読めた・0行」
+    - OCR が失敗した写真は、顔が見つかっていても診断済みにしない（文字を見ていないため）
+    - 画面: 全量スキャンの件数に「診断できなかった」を出す（0件のときは出さない）。写真1枚の診断では「見つかりませんでした」ではなく「診断できませんでした」
+    - **対象外**: 過去に失敗して「所見なし」と記録された写真は判別できないのでそのまま（OS の更新か写真の編集で再診断される）。顔検出の失敗は今も「検出ゼロ」のまま（シミュレータでは必ず失敗するので、同じ扱いにすると全写真が失敗になる。別に設計が要る）
 
 ## 機能構成
 
