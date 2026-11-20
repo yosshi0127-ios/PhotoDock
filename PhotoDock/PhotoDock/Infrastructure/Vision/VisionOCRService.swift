@@ -18,7 +18,7 @@ struct VisionOCRService: OCRService {
         // 大半の写真には文字が無く、OCR は「探して何も見つけない」だけで 270ms 使う。
         // 矩形検出は 15ms（OCR の 6%）で、162枚の実測で本物の文字は1枚も落とさなかった
         // （唯一「見逃し」に見えた1枚は OCR が模様を「■」確度0.30 と誤認したもので、
-        // Policy の確度閾値 0.5 で捨てられる行だった）。全体で 3.1 倍速。
+        // どの判定ルールにも当たらず所見にならない行だった）。全体で 3.1 倍速。
         guard Self.containsTextRectangles(in: cgImage) else { return [] }
         
         let request = VNRecognizeTextRequest()

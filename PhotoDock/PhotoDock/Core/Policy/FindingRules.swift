@@ -6,7 +6,12 @@
 /// `FindingPolicy` が使う判定基準。閾値と語彙をここに集約する。
 /// 正規表現と判定手順は Policy 側（ここは「何を基準にするか」だけを持つ）。
 struct FindingRules: Sendable {
-    /// この確度未満の読み取りは誤読とみなし、判定に使わない
+    /// この確度未満の読み取りは判定に使わない。
+    ///
+    /// Vision（`.accurate`）の確度は実測で 0.3 / 0.5 / 1.0 の3段階しか返らず、
+    /// 0.3 にも正しく読めた行が混ざる（`4111 1111 1111 1111` が一字一句正しくて 0.3）。
+    /// 0.5 で切るとそれを判定の前に捨ててしまうので、返ってくる最低の段階まで通す。
+    /// 崩れた読みは Luhn や書式に合わず、判定側で落ちる（brief「検出する種類」参照）
     let minimumConfidence: Double
 
     /// 住所判定に要求する市区町村の文字。都道府県は**要求しない**
@@ -60,7 +65,7 @@ struct FindingRules: Sendable {
     let bystanderFaceMinYaw: Double
 
     static let standard = FindingRules(
-        minimumConfidence: 0.5,
+        minimumConfidence: 0.3,
         municipalityMarkers: ["市", "区", "町", "村"],
         addressBlockGroupDigits: 1...4,
         addressBlockMaxDigits: 10,
