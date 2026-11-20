@@ -609,6 +609,41 @@ struct FindingPolicyTests {
         #expect(sut.masked("4111 1111 1111 1111", as: .cardNumber) == "**** **** **** 1111")
     }
 
+    /// 残すのは行の末尾ではなく、カード番号そのものの末尾4桁
+    @Test("カード番号の隣に別の数字があっても、番号の末尾4桁だけを残す", arguments: [
+        ("4111 1111 1111 1111 12/28", "**** **** **** 1111 **/**"),          // 有効期限
+        ("4111 1111 1111 1111 123", "**** **** **** 1111 ***"),              // セキュリティコード
+        ("カード番号 5105-1051-0510-5100 有効期限 12/28", "カード番号 ****-****-****-5100 有効期限 **/**"),
+        ("2026-09-12 4111 1111 1111 1111", "****-**-** **** **** **** 1111"), // 前に日付
+        ("1 4111 1111 1111 1111", "* **** **** **** 1111"),                  // 前に行番号
+        ("No. 4012888888881881 12/28", "No. ************1881 **/**"),        // 区切りなし
+        ("3782 822463 10005 12/28", "**** ****** *0005 **/**"),              // American Express
+        ("1234 5678 1234 5670 12/28", "**** **** **** 5670 **/**")           // ブランド不明（要注意）
+    ])
+    func maskedCardNumberKeepsCardTail(_ input: String, _ expected: String) {
+        #expect(sut.masked(input, as: .cardNumber) == expected)
+    }
+
+    @Test("1行にカード番号が2つあるときは、最初の番号の末尾4桁だけを残す")
+    func maskedCardNumberWithTwoCards() {
+        #expect(
+            sut.masked("4111 1111 1111 1111 / 5555 5555 5555 4444", as: .cardNumber)
+                == "**** **** **** 1111 / **** **** **** ****"
+        )
+    }
+
+    @Test("カード番号が見つからない文字列は、行の末尾4桁を残す")
+    func maskedCardNumberFallsBackToLineTail() {
+        #expect(sut.masked("1234 5678", as: .cardNumber) == "**** 5678")
+    }
+
+    @Test("カード番号のマスクは findings まで引き継がれる")
+    func cardNumberMaskReachesFindings() {
+        let texts = [RecognizedText(text: "4111 1111 1111 1111 12/28", confidence: 1, region: .test)]
+
+        #expect(sut.findings(in: texts).first?.maskedText == "**** **** **** 1111 **/**")
+    }
+
     @Test("電話番号は末尾4桁だけ残す")
     func maskedPhoneNumber() {
         #expect(sut.masked("090-1234-5678", as: .phoneNumber) == "***-****-5678")

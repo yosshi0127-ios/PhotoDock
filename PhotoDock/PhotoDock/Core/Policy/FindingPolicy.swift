@@ -104,35 +104,51 @@ struct FindingPolicy: Sendable {
     }
 
     /// カード番号が写っている行の危険度。無ければ nil。
+    private func cardNumberSeverity(in text: String) -> Severity? {
+        cardNumberMatch(in: text)?.severity
+    }
+
+    /// 行の中のカード番号と、その数字が行の何文字目にあるか。無ければ nil。
+    /// 位置はマスクで使う（番号そのものの末尾だけを残すため）。
     ///
     /// 数字のかたまりを区切りごとに保ったまま、**連続するかたまりの組**を候補にする。
     /// 行全体の数字を1本につなげると、隣の数字を巻き込んで見逃す
     /// （`4111 1111 1111 1111 12/28` が18桁になって Luhn に落ちる）。
     /// - Luhn が通り、番号帯と桁数がブランドに合う → **危険**
     /// - Luhn が通り、ブランドには合わないが4桁×4で書かれている → **要注意**
-    private func cardNumberSeverity(in text: String) -> Severity? {
-        var severity: Severity?
+    ///
+    /// 危険が1つでもあればそれを返す。無ければ最初に見つかった要注意を返す。
+    private func cardNumberMatch(in text: String) -> (severity: Severity, digitOffsets: [Int])? {
+        var unbranded: [Int]?
 
         for groups in digitClusters(in: text) {
             for start in groups.indices {
                 var digits = ""
 
                 for end in start..<groups.count {
-                    digits += groups[end]
+                    digits += groups[end].digits
                     guard digits.count <= rules.cardNumberDigits.upperBound else { break }
                     guard rules.cardNumberDigits.contains(digits.count), isLuhnValid(digits) else { continue }
 
+                    let candidate = groups[start...end]
+
                     if rules.cardNumberFormats.contains(where: { $0.matches(digits) }) {
-                        return .danger
+                        return (.danger, candidate.flatMap(\.offsets))
                     }
-                    if groups[start...end].map(\.count) == rules.unbrandedCardGrouping {
-                        severity = .caution
+                    if unbranded == nil, candidate.map(\.digits.count) == rules.unbrandedCardGrouping {
+                        unbranded = candidate.flatMap(\.offsets)
                     }
                 }
             }
         }
 
-        return severity
+        return unbranded.map { (.caution, $0) }
+    }
+
+    /// 区切られずに並んだ数字のかたまり。`offsets` は各数字が行の何文字目にあるか
+    private struct DigitGroup {
+        var digits = ""
+        var offsets: [Int] = []
     }
 
     /// 数字のかたまりを、近くにあるもの同士でまとめて取り出す（数字は半角に寄せる）。
@@ -140,26 +156,27 @@ struct FindingPolicy: Sendable {
     /// かたまり同士をつなぐのは空白とハイフンだけ（合わせて3文字まで。` - ` を許すため）。
     /// それ以外の文字や長い空きを挟んだ数字は別のまとまりにする
     /// （Vision は `4111 1111 1111 1111` と区切り込みで返す — 実測済み）
-    private func digitClusters(in text: String) -> [[String]] {
-        var clusters: [[String]] = []
-        var groups: [String] = []
-        var group = ""
+    private func digitClusters(in text: String) -> [[DigitGroup]] {
+        var clusters: [[DigitGroup]] = []
+        var groups: [DigitGroup] = []
+        var group = DigitGroup()
         var gap = 0
 
         func closeCluster() {
-            if !group.isEmpty { groups.append(group) }
+            if !group.digits.isEmpty { groups.append(group) }
             if !groups.isEmpty { clusters.append(groups) }
             groups = []
-            group = ""
+            group = DigitGroup()
         }
 
-        for character in text {
+        for (offset, character) in text.enumerated() {
             if Self.isMaskableDigit(character), let value = character.wholeNumberValue {
-                if gap > 0, !group.isEmpty {
+                if gap > 0, !group.digits.isEmpty {
                     groups.append(group)
-                    group = ""
+                    group = DigitGroup()
                 }
-                group += String(value)
+                group.digits += String(value)
+                group.offsets.append(offset)
                 gap = 0
             } else if character == " " || character == "-", gap < Self.maxClusterGap {
                 gap += 1
@@ -394,11 +411,32 @@ struct FindingPolicy: Sendable {
             // 郵便番号も末尾を残さない（下4桁だけで町域が特定できるため、
             // 「どのカードか」を示すカード番号の末尾4桁とは性質が違う）
             maskedDigits(text, keepingTrailing: 0)
-        case .cardNumber, .identityDocumentNumber, .phoneNumber:
+        case .cardNumber:
+            maskedCardNumber(text)
+        case .identityDocumentNumber, .phoneNumber:
             maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
         case .bystanderFace:
             text   // 顔は文字を持たない。ここに来ることはないが網羅のために置く
         }
+    }
+
+    /// カード番号そのものの末尾だけを残し、同じ行の他の数字はすべて伏せる
+    /// （`4111 1111 1111 1111 12/28` → `**** **** **** 1111 **/**`）。
+    ///
+    /// 行の末尾を残すと、番号の後ろに有効期限やセキュリティコードがあるとき、
+    /// 残る数字がそちらに移る（どのカードか分からず、期限がそのまま出る）。
+    /// 期限とセキュリティコードは「どのカードか」の識別に役立たないので残さない。
+    /// 番号が見つからない文字列は、行の末尾を残す。
+    private func maskedCardNumber(_ text: String) -> String {
+        guard let match = cardNumberMatch(in: text) else {
+            return maskedDigits(text, keepingTrailing: rules.maskedTrailingDigits)
+        }
+
+        let kept = Set(match.digitOffsets.suffix(rules.maskedTrailingDigits))
+
+        return String(text.enumerated().map { offset, character -> Character in
+            Self.isMaskableDigit(character) && !kept.contains(offset) ? "*" : character
+        })
     }
 
     /// 数字だけを伏せ、末尾の指定桁数だけ残す。区切り記号と文字はそのまま
