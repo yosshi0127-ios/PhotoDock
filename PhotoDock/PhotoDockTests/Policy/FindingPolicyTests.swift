@@ -398,10 +398,59 @@ struct FindingPolicyTests {
         "090-1234-5678",
         "08012345678",
         "03-1234-5678",
-        "0426-12-3456"
+        "0426-12-3456",
+        "07012345678",
+        "050-1234-5678",            // IP 電話（11桁）
+        "0120-123-456",             // フリーダイヤル（4-3-3）
+        "0120-12-3456",
+        "0570-012-345",             // ナビダイヤル
+        "FAX 06-6123-4567"
     ])
     func phoneNumbers(_ text: String) {
         #expect(kind(of: text) == .phoneNumber)
+    }
+
+    @Test("前後に文字や記号があっても電話番号として拾う", arguments: [
+        "TEL 03-1234-5678",
+        "TEL:045-123-4567",
+        "電話03-1234-5678",
+        "(03-1234-5678)",
+        "℡011-123-4567",
+        "携帯090-1234-5678まで",
+        "03-1234-5678 / 090-1234-5678"
+    ])
+    func phoneNumberWithSurroundingText(_ text: String) {
+        #expect(kind(of: text) == .phoneNumber)
+    }
+
+    @Test("長い数字の並びの一部は電話番号にしない", arguments: [
+        "注文番号 1209012345678",    // 途中の 09012345678
+        "ID 0901234567812",         // 後ろに数字が続く
+        "20260901234567890",
+        "伝票 1203-1234-5678",       // 前に数字が続く
+        "1-03-1234-5678",           // 前にハイフンでつながった数字がある
+        "03-1234-56789",            // 後ろに数字が続く
+        "090-1234-56789",
+        "090-1234-5678-01",         // 後ろにハイフンと数字が続く
+        "2026-0120-123-456"
+    ])
+    func partOfLongerNumberIsNotPhoneNumber(_ text: String) {
+        #expect(kind(of: text) != .phoneNumber)
+    }
+
+    @Test("合計が10桁でないハイフン区切りは固定電話にしない", arguments: [
+        "01-02-2026",       // 月-日-年の日付（8桁）
+        "08-15-1945",
+        "05-12-2024",
+        "03-12-3456",       // 8桁
+        "012-34-5678",      // 9桁
+        "012-345-678",      // 9桁
+        "03-123-456",       // 8桁
+        "0426-123-4567",    // 11桁
+        "0120-123-4567"     // 11桁
+    ])
+    func hyphenatedNumberNeedsTenDigits(_ text: String) {
+        #expect(kind(of: text) != .phoneNumber)
     }
 
     /// 「03-1234-5678」には郵便番号の書式（234-5678）が部分文字列として含まれる。
@@ -732,6 +781,7 @@ struct FindingPolicyTests {
                 cardNumberDigits: FindingRules.standard.cardNumberDigits,
                 cardNumberFormats: FindingRules.standard.cardNumberFormats,
                 unbrandedCardGrouping: FindingRules.standard.unbrandedCardGrouping,
+                landlinePhoneDigits: FindingRules.standard.landlinePhoneDigits,
                 maskedTrailingDigits: FindingRules.standard.maskedTrailingDigits,
                 bystanderFaceMaxArea: FindingRules.standard.bystanderFaceMaxArea,
                 bystanderFaceEdgeMargin: FindingRules.standard.bystanderFaceEdgeMargin,

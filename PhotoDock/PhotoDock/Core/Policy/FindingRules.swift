@@ -51,6 +51,10 @@ struct FindingRules: Sendable {
     /// 表に無いブランドのカードを見逃さないための受け皿（書式の一致だけなので断定しない）
     let unbrandedCardGrouping: [Int]
 
+    /// ハイフン区切りの固定電話・フリーダイヤルの桁数（先頭の 0 を含む）。
+    /// 市外局番の長さによらず合計は10桁（`03-1234-5678` / `0426-12-3456` / `0120-123-456`）
+    let landlinePhoneDigits: Int
+
     /// マスクで末尾に残す桁数
     let maskedTrailingDigits: Int
 
@@ -96,6 +100,7 @@ struct FindingRules: Sendable {
             CardNumberFormat(prefixes: [62...62], lengths: [16, 17, 18, 19])                  // 銀聯
         ],
         unbrandedCardGrouping: [4, 4, 4, 4],
+        landlinePhoneDigits: 10,
         maskedTrailingDigits: 4,
         bystanderFaceMaxArea: 0.02,
         bystanderFaceEdgeMargin: 0.10,
