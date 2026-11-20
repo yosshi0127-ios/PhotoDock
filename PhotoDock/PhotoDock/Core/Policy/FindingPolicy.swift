@@ -169,7 +169,9 @@ struct FindingPolicy: Sendable {
             group = DigitGroup()
         }
 
-        for (offset, character) in text.enumerated() {
+        let characters = Array(text)
+
+        for (offset, character) in characters.enumerated() {
             if Self.isMaskableDigit(character), let value = character.wholeNumberValue {
                 if gap > 0, !group.digits.isEmpty {
                     groups.append(group)
@@ -181,6 +183,20 @@ struct FindingPolicy: Sendable {
             } else if character == " " || character == "-", gap < Self.maxClusterGap {
                 gap += 1
             } else {
+                // OCR が番号と有効期限の間の空白を落とすことがある（`...444408/27`）。
+                // 期限の形が続くときは、末尾の「月」を別のかたまりに分けてから閉じる
+                if character == "/", gap == 0, endsWithExpiryMonth(group, before: characters[(offset + 1)...]) {
+                    let monthStart = group.digits.count - Self.expiryMonthDigits
+
+                    groups.append(DigitGroup(
+                        digits: String(group.digits.prefix(monthStart)),
+                        offsets: Array(group.offsets.prefix(monthStart))
+                    ))
+                    group = DigitGroup(
+                        digits: String(group.digits.suffix(Self.expiryMonthDigits)),
+                        offsets: Array(group.offsets.suffix(Self.expiryMonthDigits))
+                    )
+                }
                 closeCluster()
                 gap = 0
             }
@@ -189,6 +205,23 @@ struct FindingPolicy: Sendable {
 
         return clusters
     }
+
+    /// 数字のかたまりの末尾2桁が、有効期限（`MM/YY` / `MM/YYYY`）の「月」か。
+    ///
+    /// かたまりが `/` の直前にあり、末尾2桁が 01〜12 で、`/` の後ろに数字がちょうど2桁か4桁続くとき。
+    /// 2桁だけのかたまり（`12/28` の `12`）はもともと独立しているので対象にしない。
+    /// ここで分けるのは候補を作るためで、カード番号かどうかは Luhn とブランドの形が決める
+    private func endsWithExpiryMonth(_ group: DigitGroup, before following: ArraySlice<Character>) -> Bool {
+        guard group.digits.count > Self.expiryMonthDigits,
+              let month = Int(group.digits.suffix(Self.expiryMonthDigits)),
+              (1...12).contains(month) else { return false }
+
+        let yearDigits = following.prefix(while: Self.isMaskableDigit).count
+
+        return yearDigits == 2 || yearDigits == 4
+    }
+
+    private static let expiryMonthDigits = 2
 
     private static let maxClusterGap = 3
 
