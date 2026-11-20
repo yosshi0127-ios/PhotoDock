@@ -34,7 +34,7 @@ struct ScanStartView: View {
                 // iCloud 最適化オンの端末では 80% が端末に無い（実測）。既定オフで、Wi-Fi のときだけ取る
                 Toggle("iCloud の写真も診断する", isOn: $allowsCloudDownload)
                     .font(.subheadline)
-                Text("端末に無い写真を Wi-Fi 接続時に取り寄せます（1枚あたり約300KB）")
+                Text("端末に無い写真を Wi-Fi 接続時に取り寄せます（1枚あたり約2MB）")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
