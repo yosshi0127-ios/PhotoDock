@@ -13,6 +13,10 @@ struct ScanStartView: View {
     let access: PhotoLibraryAccess
     @Binding var allowsCloudDownload: Bool
 
+    /// 広い画面（iPhone Duo を開いたとき等）で、トグルのラベルとスイッチが両端に離れないための上限幅。
+    /// 上限なので、狭い画面では画面幅のまま変わらない
+    private static let maxContentWidth: CGFloat = 480
+
     var body: some View {
         VStack(spacing: 16) {
             if assets.isEmpty {
@@ -40,6 +44,7 @@ struct ScanStartView: View {
                 limitedNotice
             }
         }
+        .frame(maxWidth: Self.maxContentWidth)
     }
 
     /// 全量を見られていないことは伝える（見えていない分を「無かった」と誤解させない）
