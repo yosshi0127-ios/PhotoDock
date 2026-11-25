@@ -114,7 +114,7 @@ struct FullScanStateTests {
             modificationDate: nil,
             scannedAt: Date(timeIntervalSince1970: 1_750_000_000),
             quality: .quick,
-            generation: ProcessInfo.processInfo.operatingSystemVersionString,
+            generation: ScanRecordPolicy().generation(osVersion: ProcessInfo.processInfo.operatingSystemVersionString),
             outcome: .scanned([StoredFinding(kind: .cardNumber, severity: .danger, region: .test)])
         )
         let state = makeState(pixels: pixels, records: SpyScanRecordRepository(records: [record]))

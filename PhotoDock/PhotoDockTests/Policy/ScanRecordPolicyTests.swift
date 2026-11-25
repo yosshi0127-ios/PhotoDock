@@ -79,4 +79,33 @@ struct ScanRecordPolicyTests {
     func unavailableOutcomeIsRetried(_ outcome: ScanRecord.Outcome) {
         #expect(sut.needsRescan(record: record(outcome: outcome), asset: asset(), quality: .quick, generation: generation))
     }
+
+    // MARK: - 世代（OS の版 + 判定ルールの版）
+
+    @Test("世代は OS の版と判定ルールの版の両方を含む")
+    func generationContainsBothVersions() {
+        #expect(sut.generation(osVersion: "Version 26.2", rulesVersion: 3) == "Version 26.2#rules3")
+        // 省略時は今の判定ルールの版
+        #expect(sut.generation(osVersion: "Version 26.2")
+            == sut.generation(osVersion: "Version 26.2", rulesVersion: FindingRules.version))
+    }
+
+    /// 判定ルールを直したのに古い判定が記録に残り続ける、を防ぐ
+    @Test("判定ルールの版が変わっていたら診断し直す")
+    func rulesVersionChangeTriggersRescan() {
+        let old = sut.generation(osVersion: "Version 26.2", rulesVersion: 1)
+        let new = sut.generation(osVersion: "Version 26.2", rulesVersion: 2)
+
+        #expect(sut.needsRescan(record: record(generation: old), asset: asset(), quality: .quick, generation: new))
+        #expect(!sut.needsRescan(record: record(generation: new), asset: asset(), quality: .quick, generation: new))
+    }
+
+    /// 版を入れる前の記録（OS の版だけ）は、今の世代と一致しないので診断し直される
+    @Test("判定ルールの版を持たない古い記録は診断し直す")
+    func recordWithoutRulesVersionIsRescanned() {
+        let osOnly = "Version 26.2"
+        let current = sut.generation(osVersion: osOnly)
+
+        #expect(sut.needsRescan(record: record(generation: osOnly), asset: asset(), quality: .quick, generation: current))
+    }
 }

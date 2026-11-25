@@ -9,6 +9,17 @@
 /// 高品質側が常に勝つ。インデックスはただのキャッシュなので、迷ったら再スキャンに倒す。
 struct ScanRecordPolicy: Sendable {
 
+    /// 記録に残す「世代」。この値が変わると、記録は無効になり診断し直される。
+    ///
+    /// 同じ写真でも結果が変わりうる要因を2つまとめる:
+    /// - OS の版（= Vision の世代。文字の読み取り結果が変わりうる）
+    /// - 判定ルールの版（読み取った文字をどう分類するかが変わる）
+    ///
+    /// 以前は OS の版だけだったので、判定ルールを直しても記録済みの写真は古い判定のままだった
+    func generation(osVersion: String, rulesVersion: Int = FindingRules.version) -> String {
+        "\(osVersion)#rules\(rulesVersion)"
+    }
+
     /// true なら診断し直す。false なら記録をそのまま使ってよい
     func needsRescan(
         record: ScanRecord?,
