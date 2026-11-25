@@ -35,4 +35,9 @@ enum Metrics {
     static let actionMinHeight: CGFloat = 52
     /// 総合判定の記号を囲む丸の直径
     static let gradeDiameter: CGFloat = 64
+    /// 総合判定の丸の線の太さ
+    static let gradeStrokeWidth: CGFloat = 3
+    /// 本文の幅の上限。広い画面（iPhone Duo を開いたとき等）で、行の左右が離れすぎないようにする。
+    /// 上限なので、通常の iPhone の幅では画面幅のまま変わらない
+    static let readableWidth: CGFloat = 480
 }
