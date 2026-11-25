@@ -84,7 +84,7 @@ struct WelcomeView: View {
         VStack(spacing: Spacing.xs) {
             switch mode {
             case .needsPermission:
-                startButton("診断をはじめる")
+                ActionButton(title: "診断をはじめる") { onStart() }
                 Text("次に、写真へのアクセスを確認します。")
                     .font(.note)
                     .foregroundStyle(Color.inkSecondary)
@@ -93,7 +93,7 @@ struct WelcomeView: View {
                     .font(.sectionTitle)
                     .foregroundStyle(Color.inkSecondary)
             case let .firstScan(photoCount: count):
-                startButton("\(count.formatted()) 枚を診断する")
+                ActionButton(title: "\(count.formatted()) 枚を診断する") { onStart() }
             }
         }
         .frame(maxWidth: Metrics.readableWidth)
@@ -101,19 +101,6 @@ struct WelcomeView: View {
         .padding(.vertical, Spacing.s)
         .frame(maxWidth: .infinity)
         .background(Color.ground)
-    }
-
-    private func startButton(_ title: String) -> some View {
-        Button {
-            onStart()
-        } label: {
-            Text(title)
-                .font(.action)
-                .foregroundStyle(Color.onAccent)
-                .frame(maxWidth: .infinity, minHeight: Metrics.actionMinHeight)
-                .background(Color.themeAccent, in: .rect(cornerRadius: Metrics.cardRadius))
-        }
-        .buttonStyle(.plain)
     }
 }
 

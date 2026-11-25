@@ -26,7 +26,6 @@
 | 診断ホーム | ライブラリの枚数を数え、診断を始める。iCloud にある写真も診断するかを選べる |
 | 全量スキャン・診断結果 | 進捗と件数（危険・要注意・未診断・診断できなかった）を表示する。所見のある写真が、見つかった順に一覧へ増えていく |
 | 写真詳細 | 写真の上に所見の位置を枠で示し、種類と危険度を一覧表示する |
-| 1枚チェック | 写真を1枚選んで、その場で診断する |
 
 ## 検出できるもの
 
@@ -105,7 +104,7 @@ graph TD
 |------|---------|
 | 言語・ビルド | Swift 6 / Xcode（iOS 26 SDK）/ Swift Package Manager |
 | 対応 OS | iOS 26.0 以上 |
-| UI | SwiftUI / Observation（`@Observable`）/ PhotosUI（PhotosPicker） |
+| UI | SwiftUI / Observation（`@Observable`） |
 | 文字認識・顔検出 | Vision |
 | 写真の取得 | PhotoKit |
 | 端末保存 | SwiftData |
@@ -124,7 +123,7 @@ graph TD
 xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 
-# テスト（単体テスト 212 件 + UI テスト 2 件）
+# テスト（単体テスト 214 件 + UI テスト 2 件）
 xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 ```

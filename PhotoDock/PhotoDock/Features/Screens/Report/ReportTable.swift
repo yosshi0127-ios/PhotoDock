@@ -11,7 +11,10 @@ import SwiftUI
 /// ホームと診断中の画面で同じものを使う
 struct ReportTable: View {
     let items: [ScanReport.Item]
-    /// 行を押したとき。nil なら押せない表として出す（診断中）。所見のない行は常に押せない
+    /// まだ結果が出そろっていないときに、所見のない行へ出す言葉（「確認中」など）。
+    /// 診断の途中で「所見なし」と書くと、見ていない写真まで問題なしと読めてしまう。nil なら「所見なし」
+    var pendingLabel: String?
+    /// 行を押したとき。nil なら押せない表として出す。所見のない行は常に押せない
     var onSelect: ((FindingKind) -> Void)?
 
     var body: some View {
@@ -66,9 +69,9 @@ struct ReportTable: View {
                 .font(item.verdict == .danger ? .rowValue : .rowLabel)
                 .foregroundStyle(Color.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(item.verdict.label)
+            Text(verdictLabel(item))
                 .font(item.verdict.isEmphasized ? .rowValue : .rowLabel)
-                .foregroundStyle(item.verdict.tint)
+                .foregroundStyle(isPending(item) ? Color.inkSecondary : item.verdict.tint)
                 .frame(minWidth: Self.verdictWidth, alignment: .leading)
             Text(item.photoCount.formatted())
                 .font(item.photoCount > 0 ? .rowValue : .rowLabel)
@@ -82,7 +85,16 @@ struct ReportTable: View {
         .background(item.verdict == .danger ? Color.dangerSurface : Color.clear, in: .rect)
         .contentShape(.rect)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(item.kind.label)、\(item.verdict.label)、\(item.photoCount.formatted()) 枚")
+        .accessibilityLabel("\(item.kind.label)、\(verdictLabel(item))、\(item.photoCount.formatted()) 枚")
+    }
+
+    /// 所見のない行で、まだ結果が出そろっていない
+    private func isPending(_ item: ScanReport.Item) -> Bool {
+        pendingLabel != nil && item.verdict == .clear
+    }
+
+    private func verdictLabel(_ item: ScanReport.Item) -> String {
+        if let pendingLabel, item.verdict == .clear { pendingLabel } else { item.verdict.label }
     }
 
     private var chevron: some View {
@@ -109,8 +121,8 @@ struct ReportTable: View {
         .background(Color.ground)
 }
 
-#Preview("押せない表（診断中）") {
-    ReportTable(items: ScanReport.previewCaution.items)
+#Preview("診断中（所見のない行は確認中）") {
+    ReportTable(items: ScanReport.previewCaution.items, pendingLabel: "確認中") { _ in }
         .padding()
         .background(Color.ground)
 }

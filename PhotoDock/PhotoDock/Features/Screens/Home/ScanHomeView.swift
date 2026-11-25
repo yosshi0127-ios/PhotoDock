@@ -20,16 +20,11 @@ struct ScanHomeView: View {
 
         content
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink("1枚チェック") { PhotoDetailView() }
-                }
-            }
             .navigationDestination(isPresented: $state.isScanPresented) {
                 FullScanView(assets: assets, quality: state.quality, allowsDownload: allowsCloudDownload)
             }
             .navigationDestination(item: $selectedKind) { kind in
-                flaggedPhotos(of: kind)
+                FlaggedPhotosOfKindView(kind: kind, records: flagged)
             }
             // 表示されるたびに読み直す（診断から戻ったときに結果票を更新するため）。
             // 読むだけなので、途中で打ち切られても前の表示が残るだけ
@@ -85,22 +80,9 @@ struct ScanHomeView: View {
         if case let .loaded(.ready(content)) = state.phase { content.assets } else { [] }
     }
 
-    /// 項目を押した先。その種類が写っている写真だけを、今ある格子で出す
-    /// （項目ごとの一覧画面を作るまでのつなぎ）
-    private func flaggedPhotos(of kind: FindingKind) -> some View {
-        let records: [ScanRecord] = if case let .loaded(.ready(content)) = state.phase {
-            content.flagged.filter { record in record.findings.contains { $0.kind == kind } }
-        } else {
-            []
-        }
-
-        return ScrollView {
-            FlaggedPhotoGridView(records: records)
-                .padding(Spacing.xxs)
-        }
-        .background(Color.ground)
-        .navigationTitle(kind.label)
-        .navigationBarTitleDisplayMode(.inline)
+    /// 所見のある写真の記録。項目を押した先で、その種類だけに絞って出す
+    private var flagged: [ScanRecord] {
+        if case let .loaded(.ready(content)) = state.phase { content.flagged } else { [] }
     }
 }
 
