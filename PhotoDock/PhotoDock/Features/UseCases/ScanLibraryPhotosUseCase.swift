@@ -66,8 +66,8 @@ struct ScanLibraryPhotosUseCase: Sendable {
     ) async {
         // 記録はここで1回だけ読む。3万件でも辞書にして数MB
         let index = await loadIndex()
-        // Vision の世代の代理。OS が変われば記録は無効になる
-        let generation = ProcessInfo.processInfo.operatingSystemVersionString
+        // OS の版（Vision の世代の代理）と判定ルールの版。どちらかが変われば記録は無効になる
+        let generation = recordPolicy.generation(osVersion: ProcessInfo.processInfo.operatingSystemVersionString)
         let mode = await fetchMode(allowsDownload: allowsDownload, quality: quality)
 
         // ① 記録が有効な写真は診断しない。即時に流すので進捗が一気に進む

@@ -13,7 +13,9 @@ import Testing
 /// 「ダウンロードの許可が正しく経路を通ること」を見る。
 @Suite("ScanLibraryPhotosUseCase")
 struct ScanLibraryPhotosUseCaseTests {
-    private let generation = ProcessInfo.processInfo.operatingSystemVersionString
+    private let generation = ScanRecordPolicy().generation(
+        osVersion: ProcessInfo.processInfo.operatingSystemVersionString
+    )
 
     /// 「途中でやめる」テストで使う枚数。2並列・1枚 20ms で全部終えるのに約1分かかる量にする。
     /// 少ないと（20枚なら 0.1 秒）、テスト側が一瞬止まっただけで、やめる前に診断が全部終わってしまい、
