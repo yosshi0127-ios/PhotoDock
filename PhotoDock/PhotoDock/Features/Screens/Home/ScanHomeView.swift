@@ -20,11 +20,6 @@ struct ScanHomeView: View {
 
         content
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink("1枚チェック") { PhotoDetailView() }
-                }
-            }
             .navigationDestination(isPresented: $state.isScanPresented) {
                 FullScanView(assets: assets, quality: state.quality, allowsDownload: allowsCloudDownload)
             }

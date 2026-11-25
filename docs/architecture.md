@@ -45,7 +45,7 @@ Features/
 - **ディレクトリは何も強制しない。** 同一モジュールなので `Features/Scan/` を作っても隣の `Features/Setting/` から普通に参照できる。本当に境界を効かせたいなら SPM モジュールに切るしかない
 - ファイルを探すときの手がかりは「どの画面か」で、「どの機能か」ではない
 
-UseCase は**画面間では共有する**（`ScanImageUseCase` は診断ホームと1枚チェックの両方から呼ばれる）。`Core/Services` と `Core/Policy` はアプリ全体の共有物。
+UseCase は**画面間では共有する**（`LoadThumbnailUseCase` は写真の格子と写真詳細の両方から呼ばれる）。`Core/Services` と `Core/Policy` はアプリ全体の共有物。
 
 「この処理はどこに置くか」で迷ったときの対応:
 
@@ -170,7 +170,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 
 - Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanReportPolicy`（記録 → 結果票。第2段の逐次集計も兼ねる）/ `ScanProgressPolicy`（残り時間の見積もり）※当初は `ScanSummaryPolicy` が逐次集計を持っていたが、結果票に一本化した（2026-11-25）
 - UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す。診断する写真があれば OS に継続を申告し、1枚ごとに進捗を報告）/ `LoadThumbnailUseCase`
-- 画面4つ: 診断ホーム / 全量スキャン（**精密のみ**。実機でクイックの 1.63 倍で済むためプリセットは出さない） / 所見のある写真グリッド / 写真詳細（一覧からは**記録を表示するだけで再検査しない**。PhotosPicker の1枚だけ精密で診断）
+- 画面4つ: 診断ホーム / 全量スキャン（**精密のみ**。実機でクイックの 1.63 倍で済むためプリセットは出さない） / 所見のある写真グリッド / 写真詳細（**記録を表示するだけで再検査しない**。PhotosPicker で1枚だけ診断する入口は 2026-11-25 に削除）
 - 保存: `SwiftDataScanRecordRepository`。所見ゼロも「スキャン済み」として記録し、2回目以降は新しい写真の分だけ診断する。本文（マスク済み文字列）は保存しない
 - ユニットテスト169件。座標変換は合成画像を本物の Vision に通して固定してある
 - 実測（シミュレータ・162枚）: 並列化は効かない（1→2 で 7%、8 で破綻）。OCR の前段で 3.1 倍速。詳細は brief
