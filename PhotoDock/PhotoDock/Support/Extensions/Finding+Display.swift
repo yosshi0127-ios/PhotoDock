@@ -11,8 +11,8 @@ extension Severity {
 
     var tint: Color {
         switch self {
-        case .caution: .orange
-        case .danger: .red
+        case .caution: .caution
+        case .danger: .danger
         }
     }
 

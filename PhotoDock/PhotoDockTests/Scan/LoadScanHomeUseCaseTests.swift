@@ -92,7 +92,7 @@ struct LoadScanHomeUseCaseTests {
 
         let snapshot = await load(library: library)
 
-        #expect(snapshot == .ready(access: .full, assets: assets, report: nil, newPhotoCount: 3))
+        #expect(snapshot == .ready(ScanHomeContent(access: .full, assets: assets, report: nil, flagged: [], newPhotoCount: 3)))
     }
 
     @Test("記録があれば、今ある写真の記録から結果票を作る")
@@ -103,13 +103,15 @@ struct LoadScanHomeUseCaseTests {
 
         let snapshot = await load(library: SpyPhotoLibraryService(access: .full, assets: assets), records: records)
 
-        guard case let .ready(_, _, report, newPhotoCount) = snapshot else {
+        guard case let .ready(content) = snapshot else {
             Issue.record("ready にならなかった"); return
         }
-        let unwrapped = try #require(report)
+        let unwrapped = try #require(content.report)
         #expect(unwrapped.diagnosed == 2)
         #expect(unwrapped.grade == .b)
-        #expect(newPhotoCount == 0)
+        #expect(content.newPhotoCount == 0)
+        // 所見のある写真だけが一覧に回る
+        #expect(content.flagged.map(\.assetID) == ["a"])
     }
 
     /// 写真アプリで消した写真の記録は残っている。結果票に数えると枚数が合わなくなる
@@ -119,12 +121,13 @@ struct LoadScanHomeUseCaseTests {
         let records = SpyScanRecordRepository(records: [record("kept"), record("deleted", .scanned([danger]))])
         let library = SpyPhotoLibraryService(access: .full, assets: [.stub(id: "kept")])
 
-        guard case let .ready(_, _, report, _) = await load(library: library, records: records) else {
+        guard case let .ready(content) = await load(library: library, records: records) else {
             Issue.record("ready にならなかった"); return
         }
-        let unwrapped = try #require(report)
+        let unwrapped = try #require(content.report)
         #expect(unwrapped.diagnosed == 1)
         #expect(unwrapped.grade == .a)
+        #expect(content.flagged.isEmpty)
     }
 
     /// 記録はキャッシュ。読めなくても診断はできる（全件を診断し直せば元に戻る）
@@ -135,7 +138,7 @@ struct LoadScanHomeUseCaseTests {
 
         let snapshot = await load(library: library, records: SpyScanRecordRepository(failsOnLoad: true))
 
-        #expect(snapshot == .ready(access: .full, assets: assets, report: nil, newPhotoCount: 2))
+        #expect(snapshot == .ready(ScanHomeContent(access: .full, assets: assets, report: nil, flagged: [], newPhotoCount: 2)))
     }
 
     // MARK: - 新しい写真の枚数
@@ -157,10 +160,10 @@ struct LoadScanHomeUseCaseTests {
 
         let snapshot = await load(library: SpyPhotoLibraryService(access: .full, assets: assets), records: records)
 
-        guard case let .ready(_, _, _, newPhotoCount) = snapshot else {
+        guard case let .ready(content) = snapshot else {
             Issue.record("ready にならなかった"); return
         }
-        #expect(newPhotoCount == 3)
+        #expect(content.newPhotoCount == 3)
     }
 
     /// iCloud にあって取れなかった写真は毎回試すが、「新しい写真」ではない。
@@ -172,11 +175,11 @@ struct LoadScanHomeUseCaseTests {
         let records = SpyScanRecordRepository(records: [record("a", outcome)])
         let library = SpyPhotoLibraryService(access: .full, assets: [.stub(id: "a")])
 
-        guard case let .ready(_, _, report, newPhotoCount) = await load(library: library, records: records) else {
+        guard case let .ready(content) = await load(library: library, records: records) else {
             Issue.record("ready にならなかった"); return
         }
-        #expect(newPhotoCount == 0)
+        #expect(content.newPhotoCount == 0)
         // 結果票には「未診断」として載る
-        #expect(report?.undiagnosed == 1)
+        #expect(content.report?.undiagnosed == 1)
     }
 }

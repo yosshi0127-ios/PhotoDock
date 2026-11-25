@@ -42,11 +42,13 @@ struct LoadScanHomeUseCase: Sendable {
             recordPolicy.isOutdated(record: index[asset.id], asset: asset, quality: quality, generation: generation)
         }
 
-        return .ready(
+        return .ready(ScanHomeContent(
             access: access,
             assets: assets,
             report: present.isEmpty ? nil : reportPolicy.report(from: present),
+            // assets が新しい順なので、present も新しい順になっている
+            flagged: present.filter(\.isFlagged),
             newPhotoCount: newPhotoCount
-        )
+        ))
     }
 }
