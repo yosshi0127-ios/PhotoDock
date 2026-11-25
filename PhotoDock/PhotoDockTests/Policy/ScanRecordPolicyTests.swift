@@ -80,6 +80,31 @@ struct ScanRecordPolicyTests {
         #expect(sut.needsRescan(record: record(outcome: outcome), asset: asset(), quality: .quick, generation: generation))
     }
 
+    // MARK: - まだ診断していない写真（ホームの「新しい写真」）
+
+    @Test("記録が無い・編集された・品質が低い・世代が違う写真は、まだ診断していない写真")
+    func outdatedRecords() {
+        #expect(sut.isOutdated(record: nil, asset: asset(), quality: .quick, generation: generation))
+        #expect(sut.isOutdated(record: record(), asset: asset(modificationDate: edited), quality: .quick, generation: generation))
+        #expect(sut.isOutdated(record: record(quality: .quick), asset: asset(), quality: .precise, generation: generation))
+        #expect(sut.isOutdated(record: record(generation: "old"), asset: asset(), quality: .quick, generation: generation))
+        #expect(!sut.isOutdated(record: record(), asset: asset(), quality: .quick, generation: generation))
+    }
+
+    /// needsRescan は true（毎回試す）だが、「新しい写真」には数えない
+    @Test("取れなかった記録は診断し直すが、まだ診断していない写真には数えない", arguments: [
+        ScanRecord.Outcome.notAvailableLocally,
+        ScanRecord.Outcome.unavailableInCloud,
+        ScanRecord.Outcome.missing,
+        ScanRecord.Outcome.failed
+    ])
+    func unfetchedIsRetriedButNotOutdated(_ outcome: ScanRecord.Outcome) {
+        let unfetched = record(outcome: outcome)
+
+        #expect(sut.needsRescan(record: unfetched, asset: asset(), quality: .quick, generation: generation))
+        #expect(!sut.isOutdated(record: unfetched, asset: asset(), quality: .quick, generation: generation))
+    }
+
     // MARK: - 世代（OS の版 + 判定ルールの版）
 
     @Test("世代は OS の版と判定ルールの版の両方を含む")

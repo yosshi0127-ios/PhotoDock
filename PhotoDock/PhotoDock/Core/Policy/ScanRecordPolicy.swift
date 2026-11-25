@@ -27,6 +27,26 @@ struct ScanRecordPolicy: Sendable {
         quality: ScanQuality,
         generation: String
     ) -> Bool {
+        if isOutdated(record: record, asset: asset, quality: quality, generation: generation) { return true }
+
+        // 「取れなかった」記録は診断の事実ではない。前回 iCloud 上にあった写真が
+        // 今回は端末に来ているかもしれないので毎回再挑戦する（取得の失敗は一瞬で分かる）
+        guard case .scanned? = record?.outcome else { return true }
+
+        return false
+    }
+
+    /// 記録が無いか、記録が今の写真・今の診断と合わなくなっている（＝まだ診断していない写真）。
+    ///
+    /// `needsRescan` との違いは「取れなかった記録」の扱い。あちらは毎回試すので true を返すが、
+    /// こちらは false を返す。ホームの「新しい写真 ◯ 枚」に、iCloud にあって取れなかった写真を
+    /// 毎回数えないため（2,000枚がいつまでも「新しい」と表示される）
+    func isOutdated(
+        record: ScanRecord?,
+        asset: AssetMetadata,
+        quality: ScanQuality,
+        generation: String
+    ) -> Bool {
         guard let record else { return true }
 
         // 写真が編集された。切り抜きや加工で写っているものが変わりうる
@@ -35,12 +55,8 @@ struct ScanRecordPolicy: Sendable {
         // 要求のほうが高品質。逆（記録が精密・要求がクイック）は記録を使う
         if quality > record.quality { return true }
 
-        // OS が変わった = Vision の世代が変わった。同じ写真でも検出結果が変わりうる
+        // OS か判定ルールが変わった。同じ写真でも結果が変わりうる
         if record.generation != generation { return true }
-
-        // 「取れなかった」記録は診断の事実ではない。前回 iCloud 上にあった写真が
-        // 今回は端末に来ているかもしれないので毎回再挑戦する（取得の失敗は一瞬で分かる）
-        guard case .scanned = record.outcome else { return true }
 
         return false
     }
