@@ -3,20 +3,21 @@
 //  PhotoDock
 //
 
+import Foundation
 import Observation
 
-/// 全量スキャンの画面状態
+/// 全量スキャンの画面状態。診断しながら結果票（`ScanReport`）を1件ずつ埋めていく
 @MainActor
 @Observable
 final class FullScanState {
 
     enum Phase: Equatable {
         case idle
-        case scanning(ScanSummary)
-        /// 全件流れ切る前に止まった（OS の打ち切り・Live Activity からの中止）。
+        case scanning(ScanReport)
+        /// 全件流れ切る前に止まった（画面の「中断する」・OS の打ち切り・Live Activity からの中止）。
         /// 記録は残っているので、続きは restart でよい（記録がある分は一瞬で流れる）
-        case interrupted(ScanSummary)
-        case finished(ScanSummary)
+        case interrupted(ScanReport)
+        case finished(ScanReport)
     }
 
     private(set) var phase: Phase = .idle
@@ -29,8 +30,20 @@ final class FullScanState {
     /// 開始からの経過秒。スキャン中も伸びる
     private(set) var elapsedSeconds: Double = 0
 
+    /// 残りの見積もり（秒）。まだ見積もれないあいだと、診断していないあいだは nil
+    private(set) var remainingSeconds: Double?
+
+    /// ここまでの結果票。始める前は全項目が空
+    var report: ScanReport {
+        switch phase {
+        case .idle: reportPolicy.empty
+        case let .scanning(report), let .interrupted(report), let .finished(report): report
+        }
+    }
+
     private let scanLibraryPhotos = ScanLibraryPhotosUseCase()
-    private let policy = ScanSummaryPolicy()
+    private let reportPolicy = ScanReportPolicy()
+    private let progressPolicy = ScanProgressPolicy()
 
     /// 走っている診断。View の .task に乗せず自前で持つ。
     /// NavigationStack で子画面（写真詳細）を push すると親の .task はキャンセルされるので、
@@ -52,11 +65,17 @@ final class FullScanState {
         launch(assets: assets, quality: quality, allowsDownload: allowsDownload)
     }
 
-    /// 明示的な再診断。半年に一度回すアプリなので、走り直しは普通の操作。
-    /// 中断後の「続きを診断」もこれ（記録がある分は診断せずに流れる）
+    /// 中断後の「続きを診断する」。記録がある分は診断せずに流れるので、実際に続きから走る
     func restart(assets: [AssetMetadata], quality: ScanQuality, allowsDownload: Bool = false) {
         if case .scanning = phase { return }
         launch(assets: assets, quality: quality, allowsDownload: allowsDownload)
+    }
+
+    /// 画面の「中断する」。走っている診断を止める。
+    /// 止まったあとの表示（interrupted）は、診断の Task が流れ終わったところで切り替わる
+    func stop() {
+        guard case .scanning = phase else { return }
+        scanTask?.cancel()
     }
 
     /// 診断が終わる（完了か中断）まで待つ。テストと、終わりを待ちたい呼び手のため
@@ -68,43 +87,60 @@ final class FullScanState {
         total = assets.count
         flagged = []   // 再診断で前回の結果を残さない
         elapsedSeconds = 0
-        phase = .scanning(.empty)
+        remainingSeconds = nil
+        phase = .scanning(reportPolicy.empty)
 
         let records = scanLibraryPhotos(assets: assets, quality: quality, allowsDownload: allowsDownload)
-        scanTask = Task { [weak self, policy] in
-            let start = ContinuousClock.now
-            var summary = ScanSummary.empty
+        scanTask = Task { [weak self, reportPolicy] in
+            var progress = Progress(report: reportPolicy.empty)
 
             for await record in records {
                 // Task が self を強く持つと画面を閉じても State が捨てられず deinit が来ない。
                 // 弱参照にして、消えていたらここで止める（deinit の cancel が先に効くのが普通で、これは保険）
                 guard let self else { return }
-                summary = policy.adding(record, to: summary)
-                show(record, summary: summary, since: start)
+                progress.report = reportPolicy.adding(record, to: progress.report)
+                // 今回診断した記録は、開始より後の日時を持つ。再利用した記録は前回の日時のまま
+                if record.scannedAt >= progress.startedAt { progress.diagnosedNow += 1 }
+                show(record, progress: progress)
             }
 
-            self?.settle(summary, since: start)
+            self?.settle(progress)
         }
     }
 
-    private func show(_ record: ScanRecord, summary: ScanSummary, since start: ContinuousClock.Instant) {
-        // 新しいものを先頭に。固定した進捗の直下に現れるので、診断中に目で追える
-        if record.isFlagged { flagged.insert(record, at: 0) }
-        elapsedSeconds = Self.seconds(since: start)
-        phase = .scanning(summary)
+    /// 診断の Task の中で持ち回る途中経過
+    private struct Progress {
+        var report: ScanReport
+        /// 今回の診断で実際に処理した枚数（記録の再利用を除く）。残り時間の見積もりに使う
+        var diagnosedNow = 0
+        let startedAt = Date.now
+        let clockStart = ContinuousClock.now
+
+        /// components は (seconds, attoseconds) の組で、attoseconds は1秒未満の端数しか
+        /// 持たない。整数部を足さないと「75秒」が「0.03秒」になる
+        var elapsedSeconds: Double {
+            let elapsed = clockStart.duration(to: .now).components
+            return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+        }
     }
 
-    private func settle(_ summary: ScanSummary, since start: ContinuousClock.Instant) {
-        elapsedSeconds = Self.seconds(since: start)
+    private func show(_ record: ScanRecord, progress: Progress) {
+        // 新しいものを先頭に。項目を開いたとき、見つかったばかりの写真が上に来る
+        if record.isFlagged { flagged.insert(record, at: 0) }
+        elapsedSeconds = progress.elapsedSeconds
+        remainingSeconds = progressPolicy.remainingSeconds(
+            diagnosedNow: progress.diagnosedNow,
+            remaining: total - progress.report.total,
+            elapsedSeconds: elapsedSeconds
+        )
+        phase = .scanning(progress.report)
+    }
+
+    private func settle(_ progress: Progress) {
+        elapsedSeconds = progress.elapsedSeconds
+        remainingSeconds = nil
         // 全件分の記録が流れていなければ途中で止まっている。止まった理由はここでは分からなくてよく、
         // 「残りがある」ことだけを伝える（完了として途中の数字を見せない）
-        phase = summary.completed < total ? .interrupted(summary) : .finished(summary)
-    }
-
-    /// components は (seconds, attoseconds) の組で、attoseconds は1秒未満の端数しか
-    /// 持たない。整数部を足さないと「75秒」が「0.03秒」になる
-    private static func seconds(since start: ContinuousClock.Instant) -> Double {
-        let elapsed = start.duration(to: .now).components
-        return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+        phase = progress.report.total < total ? .interrupted(progress.report) : .finished(progress.report)
     }
 }

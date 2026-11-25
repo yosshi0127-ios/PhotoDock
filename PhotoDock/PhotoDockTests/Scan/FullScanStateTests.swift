@@ -80,9 +80,32 @@ struct FullScanStateTests {
         await start(state, assets: twoAssets)
 
         #expect(Set(state.flagged.map(\.assetID)) == ["1", "2"])
-        #expect(state.phase == .finished(ScanSummary(
-            scanned: 2, notAvailableLocally: 0, missing: 0, dangerPhotos: 2, cautionPhotos: 0
-        )))
+        guard case let .finished(report) = state.phase else {
+            Issue.record("finished になっていない: \(state.phase)")
+            return
+        }
+        #expect(report.diagnosed == 2)
+        #expect(report.dangerPhotos == 2)
+    }
+
+    /// 診断中の画面は、流れてきた記録で結果票の表を埋める
+    @Test("結果票の項目が、見つかった種類で埋まる")
+    func fillsReportItems() async {
+        let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText))
+
+        await start(state, assets: twoAssets)
+
+        let card = state.report.items.first { $0.kind == .cardNumber }
+        #expect(card?.verdict == .danger)
+        #expect(card?.photoCount == 2)
+        #expect(state.report.grade == .c)
+    }
+
+    @Test("始める前の結果票は、全項目が空")
+    func reportIsEmptyBeforeStart() {
+        let state = makeState(pixels: makePixels())
+
+        #expect(state.report == ScanReportPolicy().empty)
     }
 
     /// 所見ゼロの写真まで溜めると、一覧が全件になってしまう
@@ -138,10 +161,43 @@ struct FullScanStateTests {
         await start(state, assets: threeAssets)
 
         // 1枚目の報告で打ち切られるので、流れるのは1枚だけ
-        #expect(state.phase == .interrupted(ScanSummary(
-            scanned: 1, notAvailableLocally: 0, missing: 0, dangerPhotos: 0, cautionPhotos: 0
-        )))
+        guard case let .interrupted(report) = state.phase else {
+            Issue.record("interrupted になっていない: \(state.phase)")
+            return
+        }
+        #expect(report.diagnosed == 1)
         #expect(state.total == 3)
+        #expect(state.remainingSeconds == nil)
+    }
+
+    /// 画面の「中断する」。終わるのを待たずに止まり、途中の数字を完了として見せない
+    @Test("中断すると、全件が流れる前に interrupted になる")
+    func stopInterruptsScan() async {
+        let state = makeState(pixels: makePixels())
+        let moreThanCanFinish = (0..<6_000).map { AssetMetadata.stub(id: "\($0)") }
+
+        state.startIfNeeded(assets: moreThanCanFinish, quality: .quick)
+        state.stop()
+        await state.waitUntilSettled()
+
+        guard case let .interrupted(report) = state.phase else {
+            Issue.record("interrupted になっていない: \(state.phase)")
+            return
+        }
+        #expect(report.total < 6_000)
+    }
+
+    @Test("診断していないときの中断は何もしない")
+    func stopDoesNothingWhenNotScanning() async {
+        let state = makeState(pixels: makePixels())
+
+        state.stop()
+        #expect(state.phase == .idle)
+
+        await start(state, assets: twoAssets)
+        let finished = state.phase
+        state.stop()
+        #expect(state.phase == finished)
     }
 
     /// 「続きを診断」は restart。記録がある分は診断せずに流れるので、実際に続きから走る
@@ -155,8 +211,10 @@ struct FullScanStateTests {
         await start(state, assets: threeAssets)
         await restart(state, assets: threeAssets)
 
-        #expect(state.phase == .finished(ScanSummary(
-            scanned: 3, notAvailableLocally: 0, missing: 0, dangerPhotos: 0, cautionPhotos: 0
-        )))
+        guard case let .finished(report) = state.phase else {
+            Issue.record("finished になっていない: \(state.phase)")
+            return
+        }
+        #expect(report.diagnosed == 3)
     }
 }

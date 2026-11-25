@@ -168,7 +168,7 @@ swiftlint lint --strict --quiet && scripts/arch-check.sh   # exit 0 以外 = 違
 | `network` | いま通信してよい回線か（Wi-Fi・低データモードでない）。iCloud の写真を取り寄せる前に1回だけ見る | 第2段 |
 | `continuedProcessing` | 前面で始めた診断をアプリを離れても続けたいと OS に申告する（`BGContinuedProcessingTask`）。診断する写真があるときだけ申告し、1枚ごとに進捗を報告。背景の GPU（`.gpu`）を要求し、**拒否されたら nil を返して診断は前面だけで続く**（Vision が背景で GPU 無しでは止まるため） | 第2段 |
 
-- Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanSummaryPolicy`（第2段の逐次集計）
+- Policy 3本: `LibraryInventoryPolicy`（第1段の集計）/ `FindingPolicy`（文字と顔 → 所見・severity・マスク）/ `ScanReportPolicy`（記録 → 結果票。第2段の逐次集計も兼ねる）/ `ScanProgressPolicy`（残り時間の見積もり）※当初は `ScanSummaryPolicy` が逐次集計を持っていたが、結果票に一本化した（2026-11-25）
 - UseCase 5本: `ScanLibraryMetadataUseCase` / `ScanImageUseCase`（画像1枚 → 所見。OCR と顔検出を並行に回して Policy へ）/ `ScanPhotoUseCase`（ライブラリの1枚。`ScanImageUseCase` に委譲）/ `ScanLibraryPhotosUseCase`（全量。並列2・完了順に流す。診断する写真があれば OS に継続を申告し、1枚ごとに進捗を報告）/ `LoadThumbnailUseCase`
 - 画面4つ: 診断ホーム / 全量スキャン（**精密のみ**。実機でクイックの 1.63 倍で済むためプリセットは出さない） / 所見のある写真グリッド / 写真詳細（一覧からは**記録を表示するだけで再検査しない**。PhotosPicker の1枚だけ精密で診断）
 - 保存: `SwiftDataScanRecordRepository`。所見ゼロも「スキャン済み」として記録し、2回目以降は新しい写真の分だけ診断する。本文（マスク済み文字列）は保存しない

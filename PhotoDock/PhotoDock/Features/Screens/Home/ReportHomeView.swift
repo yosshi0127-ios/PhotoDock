@@ -115,20 +115,10 @@ struct ReportHomeView: View {
     }
 
     private var footer: some View {
-        Button {
-            onScan()
-        } label: {
-            Text(pendingCount > 0 ? "\(pendingCount.formatted()) 枚を診断する" : "もう一度診断する")
-                .font(.action)
-                .foregroundStyle(pendingCount > 0 ? Color.onAccent : Color.themeAccent)
-                .frame(maxWidth: .infinity, minHeight: Metrics.actionMinHeight)
-                .background(pendingCount > 0 ? Color.themeAccent : Color.surface, in: .rect(cornerRadius: Metrics.cardRadius))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Metrics.cardRadius)
-                        .stroke(Color.themeAccent, lineWidth: Metrics.hairlineWidth)
-                }
-        }
-        .buttonStyle(.plain)
+        ActionButton(
+            title: pendingCount > 0 ? "\(pendingCount.formatted()) 枚を診断する" : "もう一度診断する",
+            style: pendingCount > 0 ? .primary : .secondary
+        ) { onScan() }
         .frame(maxWidth: Metrics.readableWidth)
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
