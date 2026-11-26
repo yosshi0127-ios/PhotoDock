@@ -26,9 +26,13 @@ struct PhotoDetailStateTests {
         )
     }
 
-    private func makeState(dispositions: SpyPhotoDispositionRepository) -> PhotoDetailState {
+    private func makeState(
+        dispositions: SpyPhotoDispositionRepository,
+        actions: SpyPhotoActionService = SpyPhotoActionService()
+    ) -> PhotoDetailState {
         withDependencies {
             $0.photoDispositions = dispositions
+            $0.photoActions = actions
             // 画像は取れなくてよい（所見と対応だけを見る）
             $0.pixelSource = SpyPixelSourceService(outcome: .missing)
         } operation: {
@@ -98,5 +102,58 @@ struct PhotoDetailStateTests {
 
         #expect(state.isDismissed)
         #expect(state.didFailToSave)
+    }
+
+    // MARK: - 非表示・削除
+
+    @Test("非表示にできたら、非表示にした状態になる")
+    func removeHide() async {
+        let actions = SpyPhotoActionService()
+        let state = makeState(dispositions: SpyPhotoDispositionRepository(), actions: actions)
+
+        await state.remove(.hide, record: record)
+
+        #expect(state.removal == .hide)
+        #expect(!state.didFailToRemove)
+        #expect(!state.isWorking)
+        #expect(await actions.hiddenIDs == ["a"])
+    }
+
+    /// iOS の確認で「許可しない」を選んだだけ。失敗の文言を出すと、何か壊れたように見える
+    @Test("やめたら、何も変えず、失敗も出さない")
+    func removeCancelled() async {
+        let state = makeState(
+            dispositions: SpyPhotoDispositionRepository(), actions: SpyPhotoActionService(outcome: .cancelled)
+        )
+
+        await state.remove(.delete, record: record)
+
+        #expect(state.removal == nil)
+        #expect(!state.didFailToRemove)
+    }
+
+    @Test("できなかったら、失敗を出す", arguments: [PhotoActionOutcome.notFound, .failed])
+    func removeFailed(_ outcome: PhotoActionOutcome) async {
+        let state = makeState(
+            dispositions: SpyPhotoDispositionRepository(), actions: SpyPhotoActionService(outcome: outcome)
+        )
+
+        await state.remove(.hide, record: record)
+
+        #expect(state.removal == nil)
+        #expect(state.didFailToRemove)
+    }
+
+    /// 非表示にした写真を、続けて削除しようとしても、もうアプリからは見えない
+    @Test("一度非表示・削除したら、同じ画面からは続けて操作しない")
+    func removeOnlyOnce() async {
+        let actions = SpyPhotoActionService()
+        let state = makeState(dispositions: SpyPhotoDispositionRepository(), actions: actions)
+
+        await state.remove(.hide, record: record)
+        await state.remove(.delete, record: record)
+
+        #expect(state.removal == .hide)
+        #expect(await actions.deletedIDs.isEmpty)
     }
 }

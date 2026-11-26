@@ -22,16 +22,24 @@ struct ReportItemView: View {
     private var openPhotos: [ReportItemPhoto] { photos.filter { !$0.isHandled } }
     private var handledPhotos: [ReportItemPhoto] { photos.filter(\.isHandled) }
 
-    /// 切り替えを出すのは、未対応と対応済みの両方があるときだけ（片方しか無ければ、選ぶものが無い）
-    private var showsPicker: Bool { !handledPhotos.isEmpty && !openPhotos.isEmpty }
+    /// 対応済みの枚数。非表示・削除した写真はもう一覧に出せないので、結果票の行の数字から取る
+    private var handledCount: Int { max(item?.handledCount ?? 0, handledPhotos.count) }
 
-    /// いま並べる写真。片方しか無ければ、切り替えの状態によらずそちらを出す。
+    /// 非表示・削除して、アプリから見えなくなった写真の枚数
+    private var removedCount: Int { handledCount - handledPhotos.count }
+
+    /// 切り替えを出すのは、未対応と対応済みの両方があるときだけ（片方しか無ければ、選ぶものが無い）
+    private var showsPicker: Bool { handledCount > 0 && !openPhotos.isEmpty }
+
+    /// 対応済みの側を見ているか。片方しか無ければ、切り替えの状態によらずそちらを出す。
     /// 「対応済み」を見ている最中に取り消して対応済みが0枚になっても、一覧が空にならないように
-    private var shown: [ReportItemPhoto] {
-        if handledPhotos.isEmpty { return openPhotos }
-        if openPhotos.isEmpty { return handledPhotos }
-        return showsHandled ? handledPhotos : openPhotos
+    private var isShowingHandled: Bool {
+        if handledCount == 0 { return false }
+        if openPhotos.isEmpty { return true }
+        return showsHandled
     }
+
+    private var shown: [ReportItemPhoto] { isShowingHandled ? handledPhotos : openPhotos }
 
     var body: some View {
         ScrollView {
@@ -40,11 +48,14 @@ struct ReportItemView: View {
                 if showsPicker {
                     Picker("表示する写真", selection: $showsHandled) {
                         Text("未対応 \(openPhotos.count.formatted())").tag(false)
-                        Text("対応済み \(handledPhotos.count.formatted())").tag(true)
+                        Text("対応済み \(handledCount.formatted())").tag(true)
                     }
                     .pickerStyle(.segmented)
                 }
                 list
+                if isShowingHandled, removedCount > 0 {
+                    removedNote
+                }
             }
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
@@ -75,9 +86,27 @@ struct ReportItemView: View {
         }
     }
 
+    /// 非表示・削除した写真は、アプリからはもう読めない。枚数と、確かめられる場所だけを出す
+    private var removedNote: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text("非表示・削除した写真 \(removedCount.formatted()) 枚")
+                .font(.sectionTitle)
+            Text("写真アプリの「非表示」と「最近削除した項目」で確認できます。")
+                .font(.note)
+                .foregroundStyle(Color.inkSecondary)
+        }
+        .padding(Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.cardRadius))
+        .accessibilityElement(children: .combine)
+    }
+
     @ViewBuilder
     private var list: some View {
-        if shown.isEmpty {
+        if shown.isEmpty, isShowingHandled {
+            // 対応済みが、非表示・削除した写真だけのとき。下の注記が中身になる
+            EmptyView()
+        } else if shown.isEmpty {
             Text("この項目の写真はありません")
                 .font(.note)
                 .foregroundStyle(Color.inkSecondary)

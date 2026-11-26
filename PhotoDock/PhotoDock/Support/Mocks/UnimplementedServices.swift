@@ -83,3 +83,13 @@ struct UnimplementedPhotoDispositionRepository: PhotoDispositionRepository {
         fatalError("UnimplementedPhotoDispositionRepository.remove(assetID:) が呼ばれた（テストで上書きすること）")
     }
 }
+
+struct UnimplementedPhotoActionService: PhotoActionService {
+    func hide(assetID: String) async -> PhotoActionOutcome {
+        fatalError("UnimplementedPhotoActionService.hide(assetID:) が呼ばれた（テストで上書きすること）")
+    }
+
+    func delete(assetID: String) async -> PhotoActionOutcome {
+        fatalError("UnimplementedPhotoActionService.delete(assetID:) が呼ばれた（テストで上書きすること）")
+    }
+}

@@ -14,6 +14,8 @@ struct PhotoDetailView: View {
 
     @State private var state = PhotoDetailState()
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
@@ -38,20 +40,13 @@ struct PhotoDetailView: View {
 
     private var footer: some View {
         VStack(spacing: Spacing.xs) {
-            if state.didFailToSave {
-                Text("保存できませんでした。もう一度お試しください。")
-                    .font(.note)
-                    .foregroundStyle(Color.danger)
-            }
-            if state.isDismissed {
-                Text("問題なしにしました。結果票では対応済みに数えます。")
-                    .font(.note)
-                    .foregroundStyle(Color.inkSecondary)
-                ActionButton(title: "未対応に戻す", style: .secondary) { reopen() }
+            if let removal = state.removal {
+                removedNote(removal)
             } else {
-                ActionButton(title: "問題なしにする", style: .secondary) { dismissFindings() }
+                actions
             }
         }
+        .disabled(state.isWorking)
         .frame(maxWidth: Metrics.readableWidth)
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
@@ -59,7 +54,61 @@ struct PhotoDetailView: View {
         .background(Color.ground)
     }
 
+    /// 対処のボタン。確認は iOS が出すので、アプリ側では重ねて聞かない
+    @ViewBuilder
+    private var actions: some View {
+        if state.didFailToRemove {
+            footnote("写真を変更できませんでした。写真アプリで確認してください。", color: .danger)
+        }
+        if state.didFailToSave {
+            footnote("保存できませんでした。もう一度お試しください。", color: .danger)
+        }
+        if state.isDismissed {
+            footnote("問題なしにしました。結果票では対応済みに数えます。", color: .inkSecondary)
+        }
+
+        ActionButton(title: "非表示アルバムへ移す") { remove(.hide) }
+        ActionButton(title: "削除する", style: .secondary) { remove(.delete) }
+        // 写真を動かさない対応は、控えめに置く（上の2つと取り違えないように）
+        Button(state.isDismissed ? "未対応に戻す" : "問題なしにする") {
+            if state.isDismissed { reopen() } else { dismissFindings() }
+        }
+        .font(.action)
+        .foregroundStyle(Color.themeAccent)
+        .frame(minHeight: Metrics.rowMinHeight)
+    }
+
+    /// 非表示・削除したあと。写真はもうアプリから見えないので、戻るだけにする
+    @ViewBuilder
+    private func removedNote(_ method: RemovePhotoUseCase.Method) -> some View {
+        switch method {
+        case .hide:
+            footnote("非表示アルバムへ移しました。写真アプリの「非表示」で確認できます。", color: .inkSecondary)
+        case .delete:
+            footnote("削除しました。写真アプリの「最近削除した項目」に30日間残ります。", color: .inkSecondary)
+        }
+        ActionButton(title: "一覧に戻る") { close() }
+    }
+
+    private func footnote(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.note)
+            .foregroundStyle(color)
+            .multilineTextAlignment(.center)
+    }
+
     // 操作（レイアウトと混ぜないよう、body の外に置く）
+
+    private func remove(_ method: RemovePhotoUseCase.Method) {
+        Task {
+            await state.remove(method, record: photo.record)
+            await onDispositionChange()
+        }
+    }
+
+    private func close() {
+        dismiss()
+    }
 
     private func dismissFindings() {
         Task {
