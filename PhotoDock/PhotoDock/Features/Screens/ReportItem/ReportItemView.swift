@@ -19,6 +19,11 @@ struct ReportItemView: View {
     /// 対応済みの写真を見ているか。既定は未対応（先に見るべきもの）
     @State private var showsHandled = false
 
+    /// 開いている写真。**行ではなく、この画面が持つ**。
+    /// 行に遷移（NavigationLink）をぶら下げると、対応して行が一覧から消えたときに遷移の管理がずれ、
+    /// 写真詳細から戻ったあと、この画面の戻るボタンが効かなくなった（実機で発生。brief「段階3で決めたこと」）
+    @State private var openedPhoto: ReportItemPhoto?
+
     private var openPhotos: [ReportItemPhoto] { photos.filter { !$0.isHandled } }
     private var handledPhotos: [ReportItemPhoto] { photos.filter(\.isHandled) }
 
@@ -65,6 +70,13 @@ struct ReportItemView: View {
         .foregroundStyle(Color.ink)
         .background(Color.ground)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $openedPhoto) { photo in
+            PhotoDetailView(photo: photo, onDispositionChange: onDispositionChange)
+        }
+    }
+
+    private func open(_ photo: ReportItemPhoto) {
+        openedPhoto = photo
     }
 
     private var header: some View {
@@ -117,8 +129,8 @@ struct ReportItemView: View {
                     if photo.id != shown.first?.id {
                         Divider().overlay(Color.hairline)
                     }
-                    NavigationLink {
-                        PhotoDetailView(photo: photo, onDispositionChange: onDispositionChange)
+                    Button {
+                        open(photo)
                     } label: {
                         ReportItemPhotoRow(photo: photo, openedKind: kind)
                     }
