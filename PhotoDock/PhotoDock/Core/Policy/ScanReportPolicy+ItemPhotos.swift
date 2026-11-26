@@ -69,10 +69,9 @@ extension ScanReportPolicy {
         }
     }
 
-    /// 項目の中での1枚の判定。参考の項目は、段階によらず参考
+    /// 項目の中での1枚の判定。どの種類も、所見の段階で決まる
     func verdict(for kind: FindingKind, severity: Severity) -> ScanReport.Verdict {
-        if Self.referenceKinds.contains(kind) { return .reference }
-        return severity == .danger ? .danger : .caution
+        severity == .danger ? .danger : .caution
     }
 
     private static func comesFirst(_ lhs: ReportItemPhoto, _ rhs: ReportItemPhoto) -> Bool {

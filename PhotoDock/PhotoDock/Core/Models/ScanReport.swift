@@ -43,8 +43,6 @@ struct ScanReport: Sendable, Equatable {
         case caution
         /// 危険
         case danger
-        /// 参考。枚数は出すが総合判定には数えない（顔の写り込み）
-        case reference
         /// 対応済み。この種類の写真はあったが、すべて対応した（問題なし・非表示・削除）
         case handled
     }
@@ -70,9 +68,9 @@ struct ScanReport: Sendable, Equatable {
 
     /// 診断できた枚数（所見ゼロを含む）
     var diagnosed: Int
-    /// 危険の所見がある写真の枚数（参考の項目と、対応済みの写真は数えない）
+    /// 危険の所見がある写真の枚数（対応済みの写真は数えない）
     var dangerPhotos: Int
-    /// 要確認どまりの写真の枚数。危険と混在する写真は危険にだけ数える（参考の項目と、対応済みの写真は数えない）
+    /// 要確認どまりの写真の枚数。危険と混在する写真は危険にだけ数える（対応済みの写真は数えない）
     var cautionPhotos: Int
     /// 項目ごとの行。順序と行数は固定（`ScanReportPolicy.itemOrder`）
     var items: [Item]

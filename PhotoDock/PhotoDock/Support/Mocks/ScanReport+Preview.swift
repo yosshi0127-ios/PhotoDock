@@ -33,27 +33,27 @@ extension ScanReport {
         )
     }
 
-    /// 総合判定 B。文字の所見 9枚・顔 42枚・iCloud に 2,198枚
+    /// 総合判定 B。文字の所見 9枚・顔 42枚（重なりなし）・iCloud に 2,198枚
     static let previewCaution = make(
-        diagnosed: 853, danger: 0, caution: 9, notAvailableLocally: 2_198,
+        diagnosed: 853, danger: 0, caution: 51, notAvailableLocally: 2_198,
         counts: [
             .credential: (.caution, 1), .address: (.caution, 3), .phoneNumber: (.caution, 5),
-            .email: (.caution, 5), .postalCode: (.caution, 3), .bystanderFace: (.reference, 42)
+            .email: (.caution, 5), .postalCode: (.caution, 3), .bystanderFace: (.caution, 42)
         ]
     )
 
     /// 総合判定 C。カード番号と認証情報に危険がある
     static let previewDanger = make(
-        diagnosed: 1_204, danger: 3, caution: 12, notAvailableLocally: 0,
+        diagnosed: 1_204, danger: 3, caution: 70, notAvailableLocally: 0,
         counts: [
             .cardNumber: (.danger, 2), .credential: (.danger, 1), .address: (.caution, 4),
-            .phoneNumber: (.caution, 6), .email: (.caution, 5), .bystanderFace: (.reference, 58)
+            .phoneNumber: (.caution, 6), .email: (.caution, 5), .bystanderFace: (.caution, 58)
         ]
     )
 
-    /// 総合判定 A。顔だけ（参考）
+    /// 総合判定 A。所見なし
     static let previewClear = make(
         diagnosed: 853, danger: 0, caution: 0, notAvailableLocally: 0,
-        counts: [.bystanderFace: (.reference, 42)]
+        counts: [:]
     )
 }

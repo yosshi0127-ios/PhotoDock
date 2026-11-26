@@ -39,18 +39,11 @@ extension Severity {
     }
 }
 
-extension StoredFinding {
-    /// 写真に重ねる枠の色。参考の項目（顔の写り込み）は、下の表の「参考」と同じ控えめな色にする
-    var frameTint: Color {
-        ScanReportPolicy.referenceKinds.contains(kind) ? .inkSecondary : severity.tint
-    }
-}
-
 extension [FindingKind] {
     /// 写真詳細の「この写真を渡すと」の文。写っているものが文字か顔かで言い分ける
     var sharingNote: String {
-        let hasFace = contains { ScanReportPolicy.referenceKinds.contains($0) }
-        let hasText = contains { !ScanReportPolicy.referenceKinds.contains($0) }
+        let hasFace = contains(.bystanderFace)
+        let hasText = contains { $0 != .bystanderFace }
         let subject = switch (hasText, hasFace) {
         case (true, true): "文字と顔"
         case (false, true): "顔"
@@ -63,7 +56,8 @@ extension [FindingKind] {
 extension FindingKind {
 
     /// 項目の一覧の上に出す補足。**名前で分かる項目には付けない**。
-    /// 顔だけは、文字と違って推定であることを言う（言わないと、44枚が全部「写り込み」と読める）
+    /// 顔だけは、文字と違って推定であることを言う（言わないと、44枚が全部「写り込み」と読める）。
+    /// ほかの項目と同じ「要確認」で数えるようにしたので、この一言だけが違いを伝える
     var itemNote: String? {
         switch self {
         case .bystanderFace: "形からの推定です"

@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// 写真詳細の所見の表。種類ごとに1行で、判定の言葉は結果票と同じ（危険・要確認・参考）
+/// 写真詳細の所見の表。種類ごとに1行で、判定の言葉は結果票と同じ（危険・要確認）
 struct PhotoFindingTable: View {
     let findings: [ReportPhotoFinding]
 
@@ -48,11 +48,11 @@ struct PhotoFindingTable: View {
     }
 }
 
-#Preview("危険・要確認・参考") {
+#Preview("危険・要確認") {
     PhotoFindingTable(findings: [
         ReportPhotoFinding(kind: .cardNumber, verdict: .danger, placeCount: 1),
         ReportPhotoFinding(kind: .address, verdict: .caution, placeCount: 2),
-        ReportPhotoFinding(kind: .bystanderFace, verdict: .reference, placeCount: 3)
+        ReportPhotoFinding(kind: .bystanderFace, verdict: .caution, placeCount: 3)
     ])
     .padding()
     .background(Color.ground)
