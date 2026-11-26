@@ -28,6 +28,19 @@ final class ScanHomeState {
     // 依存は UseCase 経由のみ
     private let loadHome = LoadScanHomeUseCase()
     private let requestAccess = RequestPhotoAccessUseCase()
+    private let reportPolicy = ScanReportPolicy()
+
+    /// 結果票の項目を開いたときに並べる写真。並び順と判定は Policy が決める
+    func photos(of kind: FindingKind) -> [ReportItemPhoto] {
+        guard case let .loaded(.ready(content)) = phase else { return [] }
+        return reportPolicy.photos(of: kind, in: content.flagged, assets: content.assets)
+    }
+
+    /// 結果票の、その項目の行（判定と枚数）
+    func item(of kind: FindingKind) -> ScanReport.Item? {
+        guard case let .loaded(.ready(content)) = phase else { return nil }
+        return content.report?.items.first { $0.kind == kind }
+    }
 
     /// ホームが表示されるたびに呼ぶ（診断から戻ったときに結果票を更新するため）
     func load() async {

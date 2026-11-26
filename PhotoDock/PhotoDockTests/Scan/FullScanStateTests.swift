@@ -108,6 +108,19 @@ struct FullScanStateTests {
         #expect(state.report == ScanReportPolicy().empty)
     }
 
+    /// 項目を開いたときに並べる写真。診断中の画面は、その時点までに見つかった分を出す
+    @Test("項目の写真は、その種類が写っている写真だけ。枚数は結果票の行と同じ")
+    func photosOfKindMatchReportItem() async {
+        let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText))
+
+        await start(state, assets: twoAssets)
+
+        #expect(Set(state.photos(of: .cardNumber).map(\.id)) == ["1", "2"])
+        #expect(state.photos(of: .cardNumber).allSatisfy { $0.verdict == .danger })
+        #expect(state.photos(of: .address).isEmpty)
+        #expect(state.item(of: .cardNumber)?.photoCount == state.photos(of: .cardNumber).count)
+    }
+
     /// 所見ゼロの写真まで溜めると、一覧が全件になってしまう
     @Test("所見がなければ一覧は空のまま")
     func noFlaggedWhenClean() async {

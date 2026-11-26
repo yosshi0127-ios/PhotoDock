@@ -35,7 +35,7 @@ Features/
   Screens/
     Home/            1画面 = 1ディレクトリ（State / View / その画面専用の部品）
     FullScan/
-    FlaggedPhotos/
+    ReportItem/
     PhotoDetail/
 ```
 
