@@ -43,8 +43,7 @@ struct ReportHomeView: View {
                 .font(.screenTitle)
             Group {
                 if let date = report.lastScannedAt {
-                    // Text の format: に渡すと画面の言語設定で上書きされるので、文字列にしてから渡す
-                    Text("\(date.formatted(Self.dateFormat)) 診断 ・ 診断した写真 \(report.diagnosed.formatted()) 枚")
+                    Text("\(date.reportDayText) 診断 ・ 診断した写真 \(report.diagnosed.formatted()) 枚")
                 } else {
                     Text("診断した写真 \(report.diagnosed.formatted()) 枚")
                 }
@@ -53,10 +52,6 @@ struct ReportHomeView: View {
             .foregroundStyle(Color.inkSecondary)
         }
     }
-
-    /// 画面の文言が日本語なので、日付も端末の言語によらず日本語の書き方にそろえる
-    /// （英語の端末だと「Nov 25, 2026 診断」と混ざる）
-    private static let dateFormat = Date.FormatStyle.dateTime.year().month().day().locale(Locale(identifier: "ja_JP"))
 
     // MARK: - 診断できていない写真
 

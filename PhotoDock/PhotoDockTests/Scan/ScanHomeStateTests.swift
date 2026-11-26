@@ -114,4 +114,46 @@ struct ScanHomeStateTests {
         #expect(content.flagged.map(\.assetID) == ["a"])
         #expect(content.newPhotoCount == 0)
     }
+
+    // MARK: - 項目の写真
+
+    private func record(_ id: String, _ kinds: [FindingKind]) -> ScanRecord {
+        ScanRecord(
+            assetID: id,
+            modificationDate: nil,
+            scannedAt: Date(timeIntervalSince1970: 1_750_000_000),
+            quality: .precise,
+            generation: ScanRecordPolicy().generation(osVersion: ProcessInfo.processInfo.operatingSystemVersionString),
+            outcome: .scanned(kinds.map { StoredFinding(kind: $0, severity: .caution, region: .test) })
+        )
+    }
+
+    @Test("項目の写真は、その種類が写っている写真だけ。枚数は結果票の行と同じ")
+    func photosOfKindMatchReportItem() async {
+        let newer = Date(timeIntervalSince1970: 1_760_000_000)
+        let older = Date(timeIntervalSince1970: 1_700_000_000)
+        let library = SpyPhotoLibraryService(access: .full, assets: [
+            .stub(id: "old", creationDate: older), .stub(id: "new", creationDate: newer), .stub(id: "phone")
+        ])
+        let records = SpyScanRecordRepository(records: [
+            record("old", [.address]), record("new", [.address, .phoneNumber]), record("phone", [.phoneNumber])
+        ])
+        let state = makeState(library: library, records: records)
+
+        await state.load()
+
+        // 新しい写真が先
+        #expect(state.photos(of: .address).map(\.id) == ["new", "old"])
+        #expect(state.photos(of: .address).first?.takenAt == newer)
+        #expect(state.item(of: .address)?.photoCount == 2)
+        #expect(state.item(of: .phoneNumber)?.photoCount == state.photos(of: .phoneNumber).count)
+    }
+
+    @Test("読み込む前は、項目の写真も行も無い")
+    func noPhotosBeforeLoad() {
+        let state = makeState(library: SpyPhotoLibraryService(access: .full))
+
+        #expect(state.photos(of: .address).isEmpty)
+        #expect(state.item(of: .address) == nil)
+    }
 }

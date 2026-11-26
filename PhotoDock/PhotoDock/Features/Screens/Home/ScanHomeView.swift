@@ -29,7 +29,7 @@ struct ScanHomeView: View {
                 )
             }
             .navigationDestination(item: $selectedKind) { kind in
-                FlaggedPhotosOfKindView(kind: kind, records: flagged)
+                ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind))
             }
             // 表示されるたびに読み直す（診断から戻ったときに結果票を更新するため）。
             // 読むだけなので、途中で打ち切られても前の表示が残るだけ
@@ -92,11 +92,6 @@ struct ScanHomeView: View {
         } else {
             0
         }
-    }
-
-    /// 所見のある写真の記録。項目を押した先で、その種類だけに絞って出す
-    private var flagged: [ScanRecord] {
-        if case let .loaded(.ready(content)) = state.phase { content.flagged } else { [] }
     }
 }
 

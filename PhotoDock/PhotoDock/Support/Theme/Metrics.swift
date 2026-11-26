@@ -37,6 +37,8 @@ enum Metrics {
     static let gradeDiameter: CGFloat = 64
     /// 総合判定の丸の線の太さ
     static let gradeStrokeWidth: CGFloat = 3
+    /// 一覧の行に出すサムネイルの一辺
+    static let thumbnailSize: CGFloat = 64
     /// 本文の幅の上限。広い画面（iPhone Duo を開いたとき等）で、行の左右が離れすぎないようにする。
     /// 上限なので、通常の iPhone の幅では画面幅のまま変わらない
     static let readableWidth: CGFloat = 480

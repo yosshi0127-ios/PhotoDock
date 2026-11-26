@@ -41,6 +41,20 @@ extension Severity {
 
 extension FindingKind {
 
+    /// 項目の一覧の上に出す一言。どんな写真が当てはまるかを、身近な例で言う
+    var itemNote: String {
+        switch self {
+        case .cardNumber: "カードそのものの写真や、番号を写したメモなどです。"
+        case .identityDocumentNumber: "パスポートなど、身分証の番号が読める写真です。"
+        case .credential: "Wi-Fi のメモやログイン画面など、パスワードや認証コードが読める写真です。"
+        case .phoneNumber: "名刺や書類、連絡先の画面などです。"
+        case .email: "名刺やメールの画面などです。"
+        case .postalCode: "宛名ラベルや書類などです。住所と一緒に写っていることが多い項目です。"
+        case .address: "宛名ラベルや名刺、書類などです。"
+        case .bystanderFace: "小さく写った顔や、端にある顔、横を向いた顔です。写り込みかどうかは形だけで推定しているので、参考として出しています。"
+        }
+    }
+
     var label: String {
         switch self {
         case .cardNumber: "カード番号"

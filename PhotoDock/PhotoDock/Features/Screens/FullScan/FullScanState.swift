@@ -23,8 +23,12 @@ final class FullScanState {
     private(set) var phase: Phase = .idle
     private(set) var total = 0
 
+    /// 診断の対象。項目を開いたときに、撮った日を引くために持っておく
+    private var assets: [AssetMetadata] = []
+
     /// 所見があった写真の記録だけを溜める。3万枚でも該当は多くて数千件なのでメモリに乗る。
-    /// 記録から復元した分（前回の結果）と、今回診断した分が同じ形で並ぶ。**新しいものが先頭**
+    /// 記録から復元した分（前回の結果）と、今回診断した分が同じ形で並ぶ。
+    /// 順序に意味は持たせない（一覧に出すときの並びは Policy が決める）
     private(set) var flagged: [ScanRecord] = []
 
     /// 開始からの経過秒。スキャン中も伸びる
@@ -43,6 +47,16 @@ final class FullScanState {
 
     /// これから実際に診断する見込みの枚数。中断して再開したときは、診断し終えたぶんを引いてある
     private var expectedToDiagnose = 0
+
+    /// 結果票の項目を開いたときに並べる写真。診断中は、その時点までに見つかった分
+    func photos(of kind: FindingKind) -> [ReportItemPhoto] {
+        reportPolicy.photos(of: kind, in: flagged, assets: assets)
+    }
+
+    /// ここまでの結果票の、その項目の行（判定と枚数）
+    func item(of kind: FindingKind) -> ScanReport.Item? {
+        report.items.first { $0.kind == kind }
+    }
 
     private let scanLibraryPhotos = ScanLibraryPhotosUseCase()
     private let reportPolicy = ScanReportPolicy()
@@ -97,6 +111,7 @@ final class FullScanState {
 
     private func launch(assets: [AssetMetadata], quality: ScanQuality, allowsDownload: Bool) {
         total = assets.count
+        self.assets = assets
         flagged = []   // 再診断で前回の結果を残さない
         elapsedSeconds = 0
         remainingSeconds = nil
@@ -140,8 +155,7 @@ final class FullScanState {
     }
 
     private func show(_ record: ScanRecord, progress: Progress) {
-        // 新しいものを先頭に。項目を開いたとき、見つかったばかりの写真が上に来る
-        if record.isFlagged { flagged.insert(record, at: 0) }
+        if record.isFlagged { flagged.append(record) }
         elapsedSeconds = progress.elapsedSeconds
         let remaining = total - progress.report.total
         // 見込みが外れても（端末から消えた・新しく来た）、まだ結果の出ていない枚数は超えない
