@@ -33,6 +33,20 @@ extension ScanReportPolicy {
         return photos.sorted(by: Self.comesFirst)
     }
 
+    /// 写真詳細に出す所見。種類ごとに1行にまとめ、結果票の表と同じ順に並べる。
+    /// 診断できなかった写真は空
+    func findings(in record: ScanRecord) -> [ReportPhotoFinding] {
+        Self.itemOrder.compactMap { kind in
+            let ofKind = record.findings.filter { $0.kind == kind }
+            guard let severity = ofKind.highestSeverity else { return nil }
+            return ReportPhotoFinding(
+                kind: kind,
+                verdict: verdict(for: kind, severity: severity),
+                placeCount: ofKind.count
+            )
+        }
+    }
+
     /// 項目の中での1枚の判定。参考の項目は、段階によらず参考
     func verdict(for kind: FindingKind, severity: Severity) -> ScanReport.Verdict {
         if Self.referenceKinds.contains(kind) { return .reference }

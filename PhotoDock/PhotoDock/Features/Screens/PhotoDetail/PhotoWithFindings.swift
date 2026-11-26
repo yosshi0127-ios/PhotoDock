@@ -16,6 +16,11 @@ struct PhotoWithFindings: View {
         Image(uiImage: image)
             .resizable()
             .scaledToFit()
-            .overlay { FindingOverlay(findings: findings) }
+            .overlay {
+                FindingOverlay(findings: findings)
+                    // 枠は写真の上に描く。写真の明るさは画面のテーマと関係ないので、
+                    // ダークモード用の明るい色に切り替えない（白い写真の上で見えにくくなる）
+                    .environment(\.colorScheme, .light)
+            }
     }
 }

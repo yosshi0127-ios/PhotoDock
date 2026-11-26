@@ -24,7 +24,7 @@ struct FindingOverlay: View {
 
                 context.stroke(
                     Path(rect),
-                    with: .color(finding.severity.tint),
+                    with: .color(finding.frameTint),
                     style: finding.severity.strokeStyle
                 )
             }

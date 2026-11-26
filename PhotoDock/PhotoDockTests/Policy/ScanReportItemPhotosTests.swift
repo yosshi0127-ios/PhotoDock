@@ -166,4 +166,44 @@ struct ScanReportItemPhotosTests {
         #expect(forward == ["a", "b", "c"])
         #expect(reversed == forward)
     }
+
+    // MARK: - 写真詳細の所見
+
+    @Test("写真詳細の所見は種類ごとに1行。表と同じ順で、場所の数を持つ")
+    func findingsAreGroupedByKind() {
+        let photo = record("a", [
+            finding(.postalCode), finding(.address), finding(.cardNumber, .danger), finding(.address)
+        ])
+
+        #expect(sut.findings(in: photo) == [
+            ReportPhotoFinding(kind: .cardNumber, verdict: .danger, placeCount: 1),
+            ReportPhotoFinding(kind: .address, verdict: .caution, placeCount: 2),
+            ReportPhotoFinding(kind: .postalCode, verdict: .caution, placeCount: 1)
+        ])
+    }
+
+    @Test("同じ種類に危険と要注意があれば、その行は危険")
+    func findingRowTakesHighestSeverity() {
+        let photo = record("a", [finding(.credential, .caution), finding(.credential, .danger)])
+
+        #expect(sut.findings(in: photo) == [ReportPhotoFinding(kind: .credential, verdict: .danger, placeCount: 2)])
+    }
+
+    @Test("顔の写り込みの行は参考")
+    func faceRowIsReference() {
+        let photo = record("a", [finding(.bystanderFace), finding(.bystanderFace)])
+
+        #expect(sut.findings(in: photo) == [ReportPhotoFinding(kind: .bystanderFace, verdict: .reference, placeCount: 2)])
+    }
+
+    @Test("所見が無い写真・診断できなかった写真は、行が無い")
+    func noRowsWithoutFindings() {
+        let unfetched = ScanRecord(
+            assetID: "a", modificationDate: nil, scannedAt: day,
+            quality: .precise, generation: "test", outcome: .notAvailableLocally
+        )
+
+        #expect(sut.findings(in: record("a", [])).isEmpty)
+        #expect(sut.findings(in: unfetched).isEmpty)
+    }
 }

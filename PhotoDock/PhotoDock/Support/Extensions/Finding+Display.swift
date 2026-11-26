@@ -39,6 +39,27 @@ extension Severity {
     }
 }
 
+extension StoredFinding {
+    /// 写真に重ねる枠の色。参考の項目（顔の写り込み）は、下の表の「参考」と同じ控えめな色にする
+    var frameTint: Color {
+        ScanReportPolicy.referenceKinds.contains(kind) ? .inkSecondary : severity.tint
+    }
+}
+
+extension [FindingKind] {
+    /// 写真詳細の「この写真を渡すと」の文。写っているものが文字か顔かで言い分ける
+    var sharingNote: String {
+        let hasFace = contains { ScanReportPolicy.referenceKinds.contains($0) }
+        let hasText = contains { !ScanReportPolicy.referenceKinds.contains($0) }
+        let subject = switch (hasText, hasFace) {
+        case (true, true): "写真に写っている文字と顔"
+        case (false, true): "写真に写っている顔"
+        default: "写真に写っている文字"
+        }
+        return "\(subject)は、メールでも LINE でも SNS でも、送った先にそのまま残ります。"
+    }
+}
+
 extension FindingKind {
 
     /// 項目の一覧の上に出す一言。どんな写真が当てはまるかを、身近な例で言う
