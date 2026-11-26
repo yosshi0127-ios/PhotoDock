@@ -182,4 +182,26 @@ struct LoadScanHomeUseCaseTests {
         // 結果票には「未診断」として載る
         #expect(content.report?.undiagnosed == 1)
     }
+
+    /// 実機で起きた: 判定ルールを変えたら、ボタンが「3,053 枚を診断する」になった（診断できるのは 880枚ほど）
+    @Test("判定ルールが変わっても、取れなかった写真は新しい写真に数えない")
+    func doesNotCountUnfetchedAsNewAfterRulesChange() async {
+        let assets: [AssetMetadata] = [.stub(id: "local"), .stub(id: "cloud1"), .stub(id: "cloud2")]
+        let records = SpyScanRecordRepository(records: [
+            record("local", generation: "old"),
+            record("cloud1", .notAvailableLocally, generation: "old"),
+            record("cloud2", .notAvailableLocally, generation: "old")
+        ])
+
+        guard case let .ready(content) = await load(
+            library: SpyPhotoLibraryService(access: .full, assets: assets), records: records
+        ) else {
+            Issue.record("ready にならなかった"); return
+        }
+        // 診断し直すのは、端末にあって前回診断できた1枚だけ
+        #expect(content.newPhotoCount == 1)
+        #expect(content.pendingCount(allowsDownload: false) == 1)
+        // 取り寄せを許可していれば、iCloud のぶんも診断する
+        #expect(content.pendingCount(allowsDownload: true) == 3)
+    }
 }

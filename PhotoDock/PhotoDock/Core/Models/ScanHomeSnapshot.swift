@@ -26,4 +26,10 @@ struct ScanHomeContent: Sendable, Equatable {
     /// まだ診断していない写真の枚数（記録が無い・編集された・診断の世代が古い）。
     /// iCloud にあって取れなかった写真は含めない（毎回試すものなので「新しい写真」ではない）
     let newPhotoCount: Int
+
+    /// 次の診断で実際に診断する見込みの枚数。新しい写真に、取り寄せを許可していれば iCloud のぶんを足す。
+    /// ホームのボタンの枚数と、診断中の残り時間の見積もりで同じ値を使う
+    func pendingCount(allowsDownload: Bool) -> Int {
+        newPhotoCount + (allowsDownload ? report?.notAvailableLocally ?? 0 : 0)
+    }
 }

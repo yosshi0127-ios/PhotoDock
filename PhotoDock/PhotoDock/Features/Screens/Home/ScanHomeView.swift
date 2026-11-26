@@ -21,7 +21,12 @@ struct ScanHomeView: View {
         content
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: $state.isScanPresented) {
-                FullScanView(assets: assets, quality: state.quality, allowsDownload: allowsCloudDownload)
+                FullScanView(
+                    assets: assets,
+                    quality: state.quality,
+                    allowsDownload: allowsCloudDownload,
+                    expectedToDiagnose: expectedToDiagnose
+                )
             }
             .navigationDestination(item: $selectedKind) { kind in
                 FlaggedPhotosOfKindView(kind: kind, records: flagged)
@@ -78,6 +83,15 @@ struct ScanHomeView: View {
     /// 診断の対象。診断できる状態でしか診断画面は出ない
     private var assets: [AssetMetadata] {
         if case let .loaded(.ready(content)) = state.phase { content.assets } else { [] }
+    }
+
+    /// 実際に診断する見込みの枚数（残り時間の見積もり用）
+    private var expectedToDiagnose: Int {
+        if case let .loaded(.ready(content)) = state.phase {
+            content.pendingCount(allowsDownload: allowsCloudDownload)
+        } else {
+            0
+        }
     }
 
     /// 所見のある写真の記録。項目を押した先で、その種類だけに絞って出す

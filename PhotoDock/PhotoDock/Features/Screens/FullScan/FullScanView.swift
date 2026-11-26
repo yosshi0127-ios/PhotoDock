@@ -15,6 +15,8 @@ struct FullScanView: View {
     let quality: ScanQuality
     /// 「iCloud の写真も診断する」の設定値。回線の判定は UseCase が行う
     let allowsDownload: Bool
+    /// 実際に診断する見込みの枚数（記録の再利用と、iCloud にあって取れない写真を除く）。残り時間の見積もりに使う
+    let expectedToDiagnose: Int
 
     @State private var state = FullScanState()
 
@@ -41,7 +43,11 @@ struct FullScanView: View {
         // .task ではなく onAppear で同期に始める。.task は子画面を push しただけでキャンセルされるうえ、
         // 終わりまで await すると State を掴み続けて画面を閉じても捨てられない。
         // 項目から戻るたびに走るので、自動開始は State 側で一度きりに絞る
-        .onAppear { state.startIfNeeded(assets: assets, quality: quality, allowsDownload: allowsDownload) }
+        .onAppear {
+            state.startIfNeeded(
+                assets: assets, quality: quality, allowsDownload: allowsDownload, expectedToDiagnose: expectedToDiagnose
+            )
+        }
     }
 
     // MARK: - 操作（レイアウトと混ぜないよう、body の外に置く）
@@ -78,7 +84,8 @@ struct FullScanView: View {
                 )
             },
             quality: .precise,
-            allowsDownload: false
+            allowsDownload: false,
+            expectedToDiagnose: 40
         )
     }
 }

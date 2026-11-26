@@ -40,7 +40,12 @@ struct ScanRecordPolicy: Sendable {
     ///
     /// `needsRescan` との違いは「取れなかった記録」の扱い。あちらは毎回試すので true を返すが、
     /// こちらは false を返す。ホームの「新しい写真 ◯ 枚」に、iCloud にあって取れなかった写真を
-    /// 毎回数えないため（2,000枚がいつまでも「新しい」と表示される）
+    /// 毎回数えないため（2,000枚がいつまでも「新しい」と表示される）。
+    ///
+    /// **世代や編集日時が変わっていても、取れなかった記録は false のまま。**
+    /// 以前は世代を先に見ていたので、判定ルールを変えた直後だけ iCloud の 2,000枚が「新しい写真」に戻り、
+    /// ボタンが「3,053 枚を診断する」になった（実際に診断できるのは端末にある 880枚ほど）。
+    /// この枚数は残り時間の見積もりにも使うので、実際に診断する枚数と合っていないといけない
     func isOutdated(
         record: ScanRecord?,
         asset: AssetMetadata,
@@ -48,6 +53,9 @@ struct ScanRecordPolicy: Sendable {
         generation: String
     ) -> Bool {
         guard let record else { return true }
+
+        // 取れなかった記録は「診断していない」のであって「診断が古い」のではない
+        guard case .scanned = record.outcome else { return false }
 
         // 写真が編集された。切り抜きや加工で写っているものが変わりうる
         if record.modificationDate != asset.modificationDate { return true }
