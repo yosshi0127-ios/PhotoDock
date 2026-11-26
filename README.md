@@ -127,7 +127,7 @@ graph TD
 xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 
-# テスト（単体テスト 238 件 + UI テスト 2 件）
+# テスト（単体テスト 255 件 + UI テスト 2 件）
 xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 ```

@@ -3,6 +3,8 @@
 //  PhotoDock
 //
 
+import Foundation
+
 /// スキャン済み記録 → 診断結果票。純粋関数のみ。
 ///
 /// 1件ずつ足す形（`adding`）を基本にしてある。診断中の画面は記録が流れてくるたびに
@@ -41,20 +43,59 @@ struct ScanReportPolicy: Sendable {
     }
 
     /// 今ライブラリにある写真の記録だけで結果票を作る。
-    /// 写真アプリで消した写真の記録は残っているので、数えると枚数が合わなくなる
-    func report(from records: [ScanRecord], presentAssetIDs: Set<String>) -> ScanReport {
-        report(from: records.filter { presentAssetIDs.contains($0.assetID) })
+    /// 写真アプリで消した写真の記録は残っているので、数えると枚数が合わなくなる。
+    ///
+    /// dispositions はユーザーが選んだ対応。対応済みの写真は危険・要確認に数えず、「対応済み」に数える。
+    /// 非表示・削除した写真は今ライブラリに無いが、対応済みには数える（対応した結果として残す）
+    func report(
+        from records: [ScanRecord],
+        presentAssetIDs: Set<String>,
+        dispositions: [PhotoDisposition] = []
+    ) -> ScanReport {
+        let dispositionByID = Dictionary(dispositions.map { ($0.assetID, $0) }, uniquingKeysWith: { _, newer in newer })
+        var report = empty
+
+        for record in records where presentAssetIDs.contains(record.assetID) {
+            let isHandled = dispositionByID[record.assetID].map {
+                isActive($0, modificationDate: record.modificationDate, isPresent: true)
+            } ?? false
+            report = adding(record, to: report, isHandled: isHandled)
+        }
+
+        for disposition in dispositions where !presentAssetIDs.contains(disposition.assetID) {
+            guard isActive(disposition, modificationDate: nil, isPresent: false) else { continue }
+            addHandled(kinds: Set(disposition.kinds), to: &report)
+        }
+
+        return report
     }
 
-    /// 1件ぶんを足した結果票を返す
-    func adding(_ record: ScanRecord, to report: ScanReport) -> ScanReport {
+    /// その対応が、今も効いているか。
+    ///
+    /// - 「問題なし」: 写真がライブラリにあり、決めたあとに編集されていないあいだ。
+    ///   編集されたら外す（切り抜きや加工で、写っているものが変わりうる）
+    /// - 非表示・削除: 写真がライブラリから見えないあいだ。
+    ///   写真アプリで非表示を解除する・「最近削除した項目」から戻すと、写真がまた見えるので、未対応に戻る
+    func isActive(_ disposition: PhotoDisposition, modificationDate: Date?, isPresent: Bool) -> Bool {
+        switch disposition.action {
+        case .dismissed: isPresent && disposition.modificationDate == modificationDate
+        case .hidden, .deleted: !isPresent
+        }
+    }
+
+    /// 1件ぶんを足した結果票を返す。isHandled は、その写真が対応済みか
+    func adding(_ record: ScanRecord, to report: ScanReport, isHandled: Bool = false) -> ScanReport {
         var next = report
         next.lastScannedAt = max(report.lastScannedAt ?? record.scannedAt, record.scannedAt)
 
         switch record.outcome {
         case let .scanned(findings):
             next.diagnosed += 1
-            addFindings(findings, to: &next)
+            if isHandled {
+                addHandled(kinds: Set(findings.map(\.kind)), to: &next)
+            } else {
+                addFindings(findings, to: &next)
+            }
         case .notAvailableLocally:
             next.notAvailableLocally += 1
         case .unavailableInCloud:
@@ -66,6 +107,22 @@ struct ScanReportPolicy: Sendable {
         }
 
         return next
+    }
+
+    /// 対応済みの写真1枚ぶん。危険・要確認には数えず、写っていた種類それぞれの「対応済み」に数える
+    private func addHandled(kinds: Set<FindingKind>, to report: inout ScanReport) {
+        // 写真の枚数: 参考の項目だけの写真は、もともと総合判定に数えていないので、対応済みにも数えない
+        if !kinds.isSubset(of: Self.referenceKinds) {
+            report.handledPhotos += 1
+        }
+
+        for index in report.items.indices where kinds.contains(report.items[index].kind) {
+            report.items[index].handledCount += 1
+            // 未対応が1枚も無ければ、その項目は対応済み。あとから未対応の写真が足されれば、その判定で上書きされる
+            if report.items[index].photoCount == 0 {
+                report.items[index].verdict = .handled
+            }
+        }
     }
 
     private func addFindings(_ findings: [StoredFinding], to report: inout ScanReport) {
@@ -90,7 +147,8 @@ struct ScanReportPolicy: Sendable {
         }
     }
 
-    /// 項目の判定は上がるだけ（1枚でも危険があれば、その項目は危険）
+    /// 未対応の写真があるあいだ、項目の判定は上がるだけ（1枚でも危険があれば、その項目は危険）。
+    /// 対応済みだった項目に未対応の写真が足されたら、その写真の判定になる
     private func verdict(for kind: FindingKind, severity: Severity, current: ScanReport.Verdict) -> ScanReport.Verdict {
         if current == .danger { return .danger }
         return verdict(for: kind, severity: severity)

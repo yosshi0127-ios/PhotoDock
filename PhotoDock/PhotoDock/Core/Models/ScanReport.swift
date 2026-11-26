@@ -45,23 +45,28 @@ struct ScanReport: Sendable, Equatable {
         case danger
         /// 参考。枚数は出すが総合判定には数えない（顔の写り込み）
         case reference
+        /// 対応済み。この種類の写真はあったが、すべて対応した（問題なし・非表示・削除）
+        case handled
     }
 
     /// 表の1行
     struct Item: Sendable, Equatable, Identifiable {
         let kind: FindingKind
         var verdict: Verdict
-        /// この種類の所見がある写真の枚数
+        /// この種類の所見がある写真のうち、**まだ対応していない**枚数
         var photoCount: Int
+        /// この種類の所見があって、対応済みの写真の枚数（問題なし・非表示・削除）。
+        /// 既定値を持つのは、この項目を後から足したため（memberwise init の既存呼び出しを壊さない）
+        var handledCount: Int = 0
 
         var id: FindingKind { kind }
     }
 
     /// 診断できた枚数（所見ゼロを含む）
     var diagnosed: Int
-    /// 危険の所見がある写真の枚数（参考の項目は数えない）
+    /// 危険の所見がある写真の枚数（参考の項目と、対応済みの写真は数えない）
     var dangerPhotos: Int
-    /// 要確認どまりの写真の枚数。危険と混在する写真は危険にだけ数える（参考の項目は数えない）
+    /// 要確認どまりの写真の枚数。危険と混在する写真は危険にだけ数える（参考の項目と、対応済みの写真は数えない）
     var cautionPhotos: Int
     /// 項目ごとの行。順序と行数は固定（`ScanReportPolicy.itemOrder`）
     var items: [Item]
@@ -75,6 +80,9 @@ struct ScanReport: Sendable, Equatable {
     var missing: Int
     /// 最後に診断した日時。記録が1件も無ければ nil
     var lastScannedAt: Date?
+    /// 危険・要確認の所見があって、対応済みの写真の枚数（非表示・削除して今は見えない写真を含む）。
+    /// 総合判定には数えない（対応すると判定が上がる）。既定値を持つ理由は `Item.handledCount` と同じ
+    var handledPhotos: Int = 0
 
     /// 総合判定
     var grade: Grade {

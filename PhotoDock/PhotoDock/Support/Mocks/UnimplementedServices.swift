@@ -69,3 +69,17 @@ struct UnimplementedContinuedProcessingService: ContinuedProcessingService {
         fatalError("UnimplementedContinuedProcessingService.begin(_:onExpire:) が呼ばれた（テストで上書きすること）")
     }
 }
+
+struct UnimplementedPhotoDispositionRepository: PhotoDispositionRepository {
+    func allDispositions() async throws -> [PhotoDisposition] {
+        fatalError("UnimplementedPhotoDispositionRepository.allDispositions() が呼ばれた（テストで上書きすること）")
+    }
+
+    func save(_ disposition: PhotoDisposition) async throws {
+        fatalError("UnimplementedPhotoDispositionRepository.save(_:) が呼ばれた（テストで上書きすること）")
+    }
+
+    func remove(assetID: String) async throws {
+        fatalError("UnimplementedPhotoDispositionRepository.remove(assetID:) が呼ばれた（テストで上書きすること）")
+    }
+}

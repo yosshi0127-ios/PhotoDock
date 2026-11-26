@@ -14,11 +14,13 @@ import Testing
 struct ScanHomeStateTests {
     private func makeState(
         library: SpyPhotoLibraryService,
-        records: SpyScanRecordRepository = SpyScanRecordRepository()
+        records: SpyScanRecordRepository = SpyScanRecordRepository(),
+        dispositions: SpyPhotoDispositionRepository = SpyPhotoDispositionRepository()
     ) -> ScanHomeState {
         withDependencies {
             $0.photoLibrary = library
             $0.scanRecords = records
+            $0.photoDispositions = dispositions
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             ScanHomeState()

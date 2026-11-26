@@ -34,11 +34,13 @@ struct LoadScanHomeUseCaseTests {
 
     private func load(
         library: SpyPhotoLibraryService,
-        records: SpyScanRecordRepository = SpyScanRecordRepository()
+        records: SpyScanRecordRepository = SpyScanRecordRepository(),
+        dispositions: SpyPhotoDispositionRepository = SpyPhotoDispositionRepository()
     ) async -> ScanHomeSnapshot {
         await withDependencies {
             $0.photoLibrary = library
             $0.scanRecords = records
+            $0.photoDispositions = dispositions
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = LoadScanHomeUseCase()
@@ -203,5 +205,53 @@ struct LoadScanHomeUseCaseTests {
         #expect(content.pendingCount(allowsDownload: false) == 1)
         // 取り寄せを許可していれば、iCloud のぶんも診断する
         #expect(content.pendingCount(allowsDownload: true) == 3)
+    }
+
+    // MARK: - 対応状況
+
+    @Test("対応済みの写真は、結果票で要確認に数えず、対応済みに数える")
+    func appliesDispositions() async {
+        let assets: [AssetMetadata] = [.stub(id: "open"), .stub(id: "dismissed")]
+        let address = StoredFinding(kind: .address, severity: .caution, region: .test)
+        let records = SpyScanRecordRepository(records: [
+            record("open", .scanned([address])), record("dismissed", .scanned([address]))
+        ])
+        let dispositions = SpyPhotoDispositionRepository(dispositions: [
+            PhotoDisposition(
+                assetID: "dismissed", action: .dismissed, decidedAt: Date(timeIntervalSince1970: 1_750_000_000),
+                modificationDate: nil, kinds: [.address]
+            ),
+            // 非表示にした写真は、もうライブラリに無い
+            PhotoDisposition(
+                assetID: "hidden", action: .hidden, decidedAt: Date(timeIntervalSince1970: 1_750_000_000),
+                modificationDate: nil, kinds: [.address]
+            )
+        ])
+
+        guard case let .ready(content) = await load(
+            library: SpyPhotoLibraryService(access: .full, assets: assets), records: records, dispositions: dispositions
+        ) else {
+            Issue.record("ready にならなかった"); return
+        }
+        #expect(content.report?.cautionPhotos == 1)
+        #expect(content.report?.handledPhotos == 2)
+        #expect(content.report?.grade == .b)
+    }
+
+    /// 対応状況が読めないからといって、所見まで出せなくなってはいけない
+    @Test("対応状況が読めなければ、まだ何も対応していないものとして結果票を出す")
+    func showsReportWhenDispositionsFail() async {
+        let address = StoredFinding(kind: .address, severity: .caution, region: .test)
+        let records = SpyScanRecordRepository(records: [record("a", .scanned([address]))])
+
+        guard case let .ready(content) = await load(
+            library: SpyPhotoLibraryService(access: .full, assets: [.stub(id: "a")]),
+            records: records,
+            dispositions: SpyPhotoDispositionRepository(failsOnLoad: true)
+        ) else {
+            Issue.record("ready にならなかった"); return
+        }
+        #expect(content.report?.cautionPhotos == 1)
+        #expect(content.report?.handledPhotos == 0)
     }
 }

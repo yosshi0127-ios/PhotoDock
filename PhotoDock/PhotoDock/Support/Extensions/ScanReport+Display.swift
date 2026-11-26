@@ -13,6 +13,7 @@ extension ScanReport.Verdict {
         case .caution: "要確認"
         case .danger: "危険"
         case .reference: "参考"
+        case .handled: "対応済み"
         }
     }
 
@@ -22,6 +23,7 @@ extension ScanReport.Verdict {
         case .caution: .caution
         case .danger: .danger
         case .reference: .inkSecondary
+        case .handled: .themeAccent
         }
     }
 
@@ -29,7 +31,7 @@ extension ScanReport.Verdict {
     var isEmphasized: Bool {
         switch self {
         case .caution, .danger: true
-        case .clear, .reference: false
+        case .clear, .reference, .handled: false
         }
     }
 }
