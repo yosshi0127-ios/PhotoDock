@@ -9,10 +9,11 @@ import Foundation
 /// ホームを開いたときの状態を読む。**アクセスの確認ダイアログは出さない**
 /// （初回は約束を見せてから聞くので、ここで聞いてはいけない）。
 ///
-/// 順序の知識だけを持つ: 許可の状態を読む → 写真の一覧と記録を読む → Policy に結果票を作らせる
+/// 順序の知識だけを持つ: 許可の状態を読む → 写真の一覧・記録・対応状況を読む → Policy に結果票を作らせる
 struct LoadScanHomeUseCase: Sendable {
     @Dependency(\.photoLibrary) private var photoLibrary
     @Dependency(\.scanRecords) private var scanRecords
+    @Dependency(\.photoDispositions) private var photoDispositions
 
     private let reportPolicy = ScanReportPolicy()
     private let recordPolicy = ScanRecordPolicy()
@@ -33,6 +34,8 @@ struct LoadScanHomeUseCase: Sendable {
         let assets = await photoLibrary.fetchAllAssetMetadata()
         // 読めなければ「記録なし」として扱う（記録はキャッシュ。全件を診断し直せば元に戻る）
         let records = (try? await scanRecords.allRecords()) ?? []
+        // 読めなければ「まだ何も対応していない」として出す（対応済みの写真が未対応に見えるが、所見を隠すよりよい）
+        let dispositions = (try? await photoDispositions.allDispositions()) ?? []
         let index = Dictionary(records.map { ($0.assetID, $0) }, uniquingKeysWith: { _, newer in newer })
 
         let generation = recordPolicy.generation(osVersion: ProcessInfo.processInfo.operatingSystemVersionString)
@@ -45,7 +48,9 @@ struct LoadScanHomeUseCase: Sendable {
         return .ready(ScanHomeContent(
             access: access,
             assets: assets,
-            report: present.isEmpty ? nil : reportPolicy.report(from: present),
+            report: present.isEmpty ? nil : reportPolicy.report(
+                from: present, presentAssetIDs: Set(assets.map(\.id)), dispositions: dispositions
+            ),
             // assets が新しい順なので、present も新しい順になっている
             flagged: present.filter(\.isFlagged),
             newPhotoCount: newPhotoCount
