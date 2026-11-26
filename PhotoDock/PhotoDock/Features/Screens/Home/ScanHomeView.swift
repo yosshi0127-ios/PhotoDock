@@ -29,7 +29,10 @@ struct ScanHomeView: View {
                 )
             }
             .navigationDestination(item: $selectedKind) { kind in
-                ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind))
+                ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind)) {
+                    // 写真詳細で対応を付け外ししたら、結果票と一覧を読み直す
+                    await state.load()
+                }
             }
             // 表示されるたびに読み直す（診断から戻ったときに結果票を更新するため）。
             // 読むだけなので、途中で打ち切られても前の表示が残るだけ

@@ -38,7 +38,9 @@ struct FullScanView: View {
         )
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedKind) { kind in
-            ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind))
+            ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind)) {
+                await state.reloadDispositions()
+            }
         }
         // .task ではなく onAppear で同期に始める。.task は子画面を push しただけでキャンセルされるうえ、
         // 終わりまで await すると State を掴み続けて画面を閉じても捨てられない。

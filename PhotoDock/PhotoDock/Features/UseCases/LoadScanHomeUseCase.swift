@@ -53,7 +53,8 @@ struct LoadScanHomeUseCase: Sendable {
             ),
             // assets が新しい順なので、present も新しい順になっている
             flagged: present.filter(\.isFlagged),
-            newPhotoCount: newPhotoCount
+            newPhotoCount: newPhotoCount,
+            dispositions: dispositions
         ))
     }
 }

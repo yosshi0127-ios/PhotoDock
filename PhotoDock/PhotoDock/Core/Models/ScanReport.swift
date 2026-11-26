@@ -60,6 +60,12 @@ struct ScanReport: Sendable, Equatable {
         var handledCount: Int = 0
 
         var id: FindingKind { kind }
+
+        /// 表に出す枚数。対応済みの項目は対応した枚数、それ以外は未対応の枚数
+        var displayCount: Int { verdict == .handled ? handledCount : photoCount }
+
+        /// この種類の所見がある写真が、対応済みも含めて1枚でもあるか（行を開けるか）
+        var hasPhotos: Bool { photoCount + handledCount > 0 }
     }
 
     /// 診断できた枚数（所見ゼロを含む）

@@ -13,11 +13,37 @@ struct ReportItemView: View {
     let item: ScanReport.Item?
     /// 並び順は Policy が決めてある（危険が先、その中で新しい写真が先）
     let photos: [ReportItemPhoto]
+    /// 写真詳細で対応を付け外ししたあとに呼ぶ（開いた元が、結果票と一覧を作り直す）
+    var onDispositionChange: () async -> Void = {}
+
+    /// 対応済みの写真を見ているか。既定は未対応（先に見るべきもの）
+    @State private var showsHandled = false
+
+    private var openPhotos: [ReportItemPhoto] { photos.filter { !$0.isHandled } }
+    private var handledPhotos: [ReportItemPhoto] { photos.filter(\.isHandled) }
+
+    /// 切り替えを出すのは、未対応と対応済みの両方があるときだけ（片方しか無ければ、選ぶものが無い）
+    private var showsPicker: Bool { !handledPhotos.isEmpty && !openPhotos.isEmpty }
+
+    /// いま並べる写真。片方しか無ければ、切り替えの状態によらずそちらを出す。
+    /// 「対応済み」を見ている最中に取り消して対応済みが0枚になっても、一覧が空にならないように
+    private var shown: [ReportItemPhoto] {
+        if handledPhotos.isEmpty { return openPhotos }
+        if openPhotos.isEmpty { return handledPhotos }
+        return showsHandled ? handledPhotos : openPhotos
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 header
+                if showsPicker {
+                    Picker("表示する写真", selection: $showsHandled) {
+                        Text("未対応 \(openPhotos.count.formatted())").tag(false)
+                        Text("対応済み \(handledPhotos.count.formatted())").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
                 list
             }
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
@@ -38,7 +64,7 @@ struct ReportItemView: View {
             Text(kind.label)
                 .font(.screenTitle)
             if let item {
-                Text("\(item.verdict.label) \(item.photoCount.formatted()) 枚")
+                Text("\(item.verdict.label) \(item.displayCount.formatted()) 枚")
                     .font(.sectionTitle)
                     .foregroundStyle(item.verdict.tint)
             }
@@ -51,19 +77,19 @@ struct ReportItemView: View {
 
     @ViewBuilder
     private var list: some View {
-        if photos.isEmpty {
+        if shown.isEmpty {
             Text("この項目の写真はありません")
                 .font(.note)
                 .foregroundStyle(Color.inkSecondary)
         } else {
             // 数十〜数百行になりうるので、画面に出た行だけを作る（サムネイルの読み込みも行ごと）
             LazyVStack(spacing: 0) {
-                ForEach(photos) { photo in
-                    if photo.id != photos.first?.id {
+                ForEach(shown) { photo in
+                    if photo.id != shown.first?.id {
                         Divider().overlay(Color.hairline)
                     }
                     NavigationLink {
-                        PhotoDetailView(photo: photo)
+                        PhotoDetailView(photo: photo, onDispositionChange: onDispositionChange)
                     } label: {
                         ReportItemPhotoRow(photo: photo, openedKind: kind)
                     }

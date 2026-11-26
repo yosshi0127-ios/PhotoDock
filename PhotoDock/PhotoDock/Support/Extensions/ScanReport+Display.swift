@@ -59,6 +59,7 @@ extension ScanReport {
     /// 見出しの下の一言
     var verdictNote: String {
         switch grade {
+        case .a where handledPhotos > 0: "確認が必要だった \(handledPhotos.formatted()) 枚は、すべて対応済みです"
         case .a: "確認が必要な写真はありません"
         case .b: "危険と判定された写真はありません"
         case .c where cautionPhotos > 0: "ほかに要確認の写真が \(cautionPhotos.formatted()) 枚あります"

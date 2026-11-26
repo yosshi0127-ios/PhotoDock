@@ -20,13 +20,15 @@ struct FullScanStateTests {
         pixels: SpyPixelSourceService,
         ocr: SpyOCRService = SpyOCRService(),
         records: SpyScanRecordRepository = SpyScanRecordRepository(),
-        continuation: SpyContinuedProcessingService = SpyContinuedProcessingService()
+        continuation: SpyContinuedProcessingService = SpyContinuedProcessingService(),
+        dispositions: SpyPhotoDispositionRepository = SpyPhotoDispositionRepository()
     ) -> FullScanState {
         withDependencies {
             $0.pixelSource = pixels
             $0.ocr = ocr
             $0.faceDetection = SpyFaceDetectionService()
             $0.scanRecords = records
+            $0.photoDispositions = dispositions
             $0.network = SpyNetworkStatusService(unmetered: false)
             $0.continuedProcessing = continuation
         } operation: {
@@ -119,6 +121,52 @@ struct FullScanStateTests {
         #expect(state.photos(of: .cardNumber).allSatisfy { $0.verdict == .danger })
         #expect(state.photos(of: .address).isEmpty)
         #expect(state.item(of: .cardNumber)?.photoCount == state.photos(of: .cardNumber).count)
+    }
+
+    // MARK: - 対応済み
+
+    private func dismissed(_ id: String) -> PhotoDisposition {
+        PhotoDisposition(
+            assetID: id, action: .dismissed, decidedAt: Date(timeIntervalSince1970: 1_750_000_000),
+            modificationDate: nil, kinds: [.cardNumber]
+        )
+    }
+
+    @Test("問題なしにしてある写真は、診断中の結果票でも危険に数えない")
+    func handledPhotoIsNotCountedWhileScanning() async {
+        let state = makeState(
+            pixels: makePixels(), ocr: SpyOCRService(texts: cardText),
+            dispositions: SpyPhotoDispositionRepository(dispositions: [dismissed("1")])
+        )
+
+        await start(state, assets: twoAssets)
+
+        #expect(state.report.dangerPhotos == 1)
+        #expect(state.report.handledPhotos == 1)
+        #expect(state.photos(of: .cardNumber).first { $0.id == "1" }?.isHandled == true)
+        #expect(state.photos(of: .cardNumber).first { $0.id == "2" }?.isHandled == false)
+    }
+
+    /// 写真詳細で「問題なしにする」を押したあと、開いた元の画面が呼ぶ
+    @Test("対応を読み直すと、ここまでの結果票が作り直される")
+    func reloadDispositionsRebuildsReport() async {
+        let dispositions = SpyPhotoDispositionRepository()
+        let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText), dispositions: dispositions)
+        await start(state, assets: twoAssets)
+        #expect(state.report.grade == .c)
+
+        try? await dispositions.save(dismissed("1"))
+        try? await dispositions.save(dismissed("2"))
+        await state.reloadDispositions()
+
+        guard case let .finished(report) = state.phase else {
+            Issue.record("finished のままでない: \(state.phase)")
+            return
+        }
+        #expect(report.grade == .a)
+        #expect(report.handledPhotos == 2)
+        #expect(report.diagnosed == 2)
+        #expect(state.item(of: .cardNumber)?.verdict == .handled)
     }
 
     /// 所見ゼロの写真まで溜めると、一覧が全件になってしまう

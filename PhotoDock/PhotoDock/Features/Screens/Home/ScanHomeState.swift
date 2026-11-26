@@ -33,7 +33,9 @@ final class ScanHomeState {
     /// 結果票の項目を開いたときに並べる写真。並び順と判定は Policy が決める
     func photos(of kind: FindingKind) -> [ReportItemPhoto] {
         guard case let .loaded(.ready(content)) = phase else { return [] }
-        return reportPolicy.photos(of: kind, in: content.flagged, assets: content.assets)
+        return reportPolicy.photos(
+            of: kind, in: content.flagged, assets: content.assets, dispositions: content.dispositions
+        )
     }
 
     /// 結果票の、その項目の行（判定と枚数）

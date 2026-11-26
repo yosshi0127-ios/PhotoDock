@@ -21,20 +21,52 @@ final class PhotoDetailState {
     /// 種類ごとにまとめた所見。写真の読み込みを待たずに出す
     private(set) var findings: [ReportPhotoFinding] = []
 
+    /// 「問題なし」にしてあるか。開いたときは一覧の時点の状態で、ボタンを押すと変わる
+    private(set) var isDismissed = false
+
+    /// 対応を保存できなかった。次に押して成功するまで出す
+    private(set) var didFailToSave = false
+
     // 依存は UseCase 経由のみ
     private let loadThumbnail = LoadThumbnailUseCase()
+    private let dismissPhoto = DismissPhotoUseCase()
+    private let reopenPhoto = ReopenPhotoUseCase()
     private let reportPolicy = ScanReportPolicy()
 
     private var didShow = false
 
     /// 記録をそのまま見せる。
     /// 表示は縮小版で足りる — Region は正規化座標なので、比率が同じなら枠は合う
-    func show(record: ScanRecord) async {
+    func show(record: ScanRecord, isHandled: Bool) async {
         guard !didShow else { return }   // 再表示のたびに読み直さない
         didShow = true
+        isDismissed = isHandled
 
         findings = reportPolicy.findings(in: record)
         image = await loadThumbnail(assetID: record.assetID, maxPixelSize: 1_200).flatMap(UIImage.init(data:))
         isLoadingImage = false
+    }
+
+    /// 「問題なしにする」。写真ライブラリには触らず、アプリの中の印を付けるだけ。
+    /// 保存できたときだけ表示を変える（できていないのに「対応済み」と見せない）
+    func dismiss(record: ScanRecord) async {
+        do {
+            try await dismissPhoto(record: record)
+            isDismissed = true
+            didFailToSave = false
+        } catch {
+            didFailToSave = true
+        }
+    }
+
+    /// 「未対応に戻す」
+    func reopen(record: ScanRecord) async {
+        do {
+            try await reopenPhoto(assetID: record.assetID)
+            isDismissed = false
+            didFailToSave = false
+        } catch {
+            didFailToSave = true
+        }
     }
 }

@@ -158,4 +158,22 @@ struct ScanHomeStateTests {
         #expect(state.photos(of: .address).isEmpty)
         #expect(state.item(of: .address) == nil)
     }
+
+    @Test("問題なしにした写真は、一覧で対応済みの印が付き、結果票では対応済みに数える")
+    func handledPhotoIsMarked() async {
+        let library = SpyPhotoLibraryService(access: .full, assets: [.stub(id: "open"), .stub(id: "done")])
+        let records = SpyScanRecordRepository(records: [record("open", [.address]), record("done", [.address])])
+        let dispositions = SpyPhotoDispositionRepository(dispositions: [
+            PhotoDisposition(
+                assetID: "done", action: .dismissed, decidedAt: Date(timeIntervalSince1970: 1_750_000_000),
+                modificationDate: nil, kinds: [.address]
+            )
+        ])
+        let state = makeState(library: library, records: records, dispositions: dispositions)
+
+        await state.load()
+
+        #expect(state.photos(of: .address).filter(\.isHandled).map(\.id) == ["done"])
+        #expect(state.item(of: .address) == ScanReport.Item(kind: .address, verdict: .caution, photoCount: 1, handledCount: 1))
+    }
 }
