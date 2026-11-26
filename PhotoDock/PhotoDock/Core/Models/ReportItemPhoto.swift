@@ -23,3 +23,11 @@ struct ReportItemPhoto: Sendable, Equatable, Identifiable {
 
     var id: String { record.assetID }
 }
+
+/// 画面遷移の値として使うため（`navigationDestination(item:)` は Hashable を求める）。
+/// 写真1枚は ID で決まるので、ハッシュは ID だけで足りる（等しい2つは ID も等しい）
+extension ReportItemPhoto: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(record.assetID)
+    }
+}
