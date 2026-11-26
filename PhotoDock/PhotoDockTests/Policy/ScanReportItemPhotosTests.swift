@@ -206,4 +206,34 @@ struct ScanReportItemPhotosTests {
         #expect(sut.findings(in: record("a", [])).isEmpty)
         #expect(sut.findings(in: unfetched).isEmpty)
     }
+
+    // MARK: - 対応済みの印
+
+    @Test("問題なしにした写真には印が付く。並び順は変わらない")
+    func marksHandledPhotos() {
+        let records = [record("a", [finding(.address)]), record("b", [finding(.address)])]
+        let dismissed = PhotoDisposition(assetID: "a", action: .dismissed, decidedAt: day, modificationDate: nil, kinds: [.address])
+
+        let photos = sut.photos(of: .address, in: records, assets: [asset("a"), asset("b")], dispositions: [dismissed])
+
+        #expect(photos.map(\.id) == ["a", "b"])
+        #expect(photos.map(\.isHandled) == [true, false])
+    }
+
+    @Test("対応を組み立てるとき、写っていた種類を表の順で残し、写真の編集日時を控える")
+    func buildsDisposition() {
+        let edited = day.addingTimeInterval(100)
+        let photo = ScanRecord(
+            assetID: "a", modificationDate: edited, scannedAt: day, quality: .precise, generation: "test",
+            outcome: .scanned([finding(.postalCode), finding(.address), finding(.address)])
+        )
+
+        let disposition = sut.disposition(.dismissed, for: photo, decidedAt: day)
+
+        #expect(disposition == PhotoDisposition(
+            assetID: "a", action: .dismissed, decidedAt: day, modificationDate: edited, kinds: [.address, .postalCode]
+        ))
+        // 自分で組み立てた対応は、その記録に対して効いている
+        #expect(sut.isActive(disposition, modificationDate: photo.modificationDate, isPresent: true))
+    }
 }

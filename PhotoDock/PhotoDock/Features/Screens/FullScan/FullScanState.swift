@@ -31,6 +31,13 @@ final class FullScanState {
     /// 順序に意味は持たせない（一覧に出すときの並びは Policy が決める）
     private(set) var flagged: [ScanRecord] = []
 
+    /// ここまでに流れてきた記録のすべて。対応が変わったときに、結果票を作り直すために持つ
+    /// （3万枚でも、本文を持たない記録なので数MB）
+    private var records: [ScanRecord] = []
+
+    /// ユーザーが選んだ対応。診断を始めるときに読み、写真詳細で付け外ししたら読み直す
+    private var dispositions: [PhotoDisposition] = []
+
     /// 開始からの経過秒。スキャン中も伸びる
     private(set) var elapsedSeconds: Double = 0
 
@@ -50,7 +57,7 @@ final class FullScanState {
 
     /// 結果票の項目を開いたときに並べる写真。診断中は、その時点までに見つかった分
     func photos(of kind: FindingKind) -> [ReportItemPhoto] {
-        reportPolicy.photos(of: kind, in: flagged, assets: assets)
+        reportPolicy.photos(of: kind, in: flagged, assets: assets, dispositions: dispositions)
     }
 
     /// ここまでの結果票の、その項目の行（判定と枚数）
@@ -59,6 +66,7 @@ final class FullScanState {
     }
 
     private let scanLibraryPhotos = ScanLibraryPhotosUseCase()
+    private let loadDispositions = LoadPhotoDispositionsUseCase()
     private let reportPolicy = ScanReportPolicy()
     private let progressPolicy = ScanProgressPolicy()
 
@@ -97,6 +105,20 @@ final class FullScanState {
         launch(assets: assets, quality: quality, allowsDownload: allowsDownload)
     }
 
+    /// 写真詳細で対応を付け外ししたあとに呼ぶ。対応を読み直して、ここまでの結果票を作り直す
+    func reloadDispositions() async {
+        dispositions = await loadDispositions()
+        let rebuilt = reportPolicy.report(
+            from: records, presentAssetIDs: Set(assets.map(\.id)), dispositions: dispositions
+        )
+        switch phase {
+        case .idle: break
+        case .scanning: phase = .scanning(rebuilt)
+        case .interrupted: phase = .interrupted(rebuilt)
+        case .finished: phase = .finished(rebuilt)
+        }
+    }
+
     /// 画面の「中断する」。走っている診断を止める。
     /// 止まったあとの表示（interrupted）は、診断の Task が流れ終わったところで切り替わる
     func stop() {
@@ -113,19 +135,22 @@ final class FullScanState {
         total = assets.count
         self.assets = assets
         flagged = []   // 再診断で前回の結果を残さない
+        self.records = []
         elapsedSeconds = 0
         remainingSeconds = nil
         phase = .scanning(reportPolicy.empty)
 
         let records = scanLibraryPhotos(assets: assets, quality: quality, allowsDownload: allowsDownload)
-        scanTask = Task { [weak self, reportPolicy, progressPolicy] in
-            var progress = Progress(report: reportPolicy.empty)
+        scanTask = Task { [weak self, progressPolicy, loadDispositions] in
+            var progress = Progress()
+            // 対応済みの写真を、診断中の結果票でも要確認に数えないため
+            let dispositions = await loadDispositions()
+            self?.dispositions = dispositions
 
             for await record in records {
                 // Task が self を強く持つと画面を閉じても State が捨てられず deinit が来ない。
                 // 弱参照にして、消えていたらここで止める（deinit の cancel が先に効くのが普通で、これは保険）
                 guard let self else { return }
-                progress.report = reportPolicy.adding(record, to: progress.report)
                 // 今回診断した記録は、開始より後の日時を持つ。再利用した記録は前回の日時のまま。
                 // そのうち、画像を読むところまで進んだものだけを数える（端末に無い写真は一瞬で終わる）
                 if record.scannedAt >= progress.startedAt, progressPolicy.takesTime(record.outcome) {
@@ -140,7 +165,6 @@ final class FullScanState {
 
     /// 診断の Task の中で持ち回る途中経過
     private struct Progress {
-        var report: ScanReport
         /// 今回の診断で実際に診断した枚数（記録の再利用と、端末に無い写真を除く）。残り時間の見積もりに使う
         var diagnosedNow = 0
         let startedAt = Date.now
@@ -155,9 +179,15 @@ final class FullScanState {
     }
 
     private func show(_ record: ScanRecord, progress: Progress) {
+        records.append(record)
         if record.isFlagged { flagged.append(record) }
+        // 結果票は、いま画面に出ているもの（対応を読み直して作り直したあとなら、その結果）に足していく
+        let isHandled = dispositions.first { $0.assetID == record.assetID }.map {
+            reportPolicy.isActive($0, modificationDate: record.modificationDate, isPresent: true)
+        } ?? false
+        let next = reportPolicy.adding(record, to: report, isHandled: isHandled)
         elapsedSeconds = progress.elapsedSeconds
-        let remaining = total - progress.report.total
+        let remaining = total - next.total
         // 見込みが外れても（端末から消えた・新しく来た）、まだ結果の出ていない枚数は超えない
         let toDiagnose = max(0, min(expectedToDiagnose - progress.diagnosedNow, remaining))
         remainingSeconds = progressPolicy.remainingSeconds(
@@ -166,7 +196,7 @@ final class FullScanState {
             remainingQuick: remaining - toDiagnose,
             elapsedSeconds: elapsedSeconds
         )
-        phase = .scanning(progress.report)
+        phase = .scanning(next)
     }
 
     private func settle(_ progress: Progress) {
@@ -176,6 +206,7 @@ final class FullScanState {
         expectedToDiagnose = max(0, expectedToDiagnose - progress.diagnosedNow)
         // 全件分の記録が流れていなければ途中で止まっている。止まった理由はここでは分からなくてよく、
         // 「残りがある」ことだけを伝える（完了として途中の数字を見せない）
-        phase = progress.report.total < total ? .interrupted(progress.report) : .finished(progress.report)
+        let settled = report
+        phase = settled.total < total ? .interrupted(settled) : .finished(settled)
     }
 }

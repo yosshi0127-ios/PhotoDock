@@ -9,6 +9,8 @@ import SwiftUI
 /// 写真の上に所見の場所を枠で示し、下に種類ごとの判定を並べる
 struct PhotoDetailView: View {
     let photo: ReportItemPhoto
+    /// 対応を付け外ししたあとに呼ぶ。開いた元（ホーム・診断中の画面）が、結果票と一覧を作り直す
+    var onDispositionChange: () async -> Void = {}
 
     @State private var state = PhotoDetailState()
 
@@ -27,8 +29,50 @@ struct PhotoDetailView: View {
         }
         .foregroundStyle(Color.ink)
         .background(Color.ground)
+        .safeAreaInset(edge: .bottom) { footer }
         .navigationBarTitleDisplayMode(.inline)
-        .task { await state.show(record: photo.record) }
+        .task { await state.show(record: photo.record, isHandled: photo.isHandled) }
+    }
+
+    // MARK: - 対処
+
+    private var footer: some View {
+        VStack(spacing: Spacing.xs) {
+            if state.didFailToSave {
+                Text("保存できませんでした。もう一度お試しください。")
+                    .font(.note)
+                    .foregroundStyle(Color.danger)
+            }
+            if state.isDismissed {
+                Text("問題なしにしました。結果票では対応済みに数えます。")
+                    .font(.note)
+                    .foregroundStyle(Color.inkSecondary)
+                ActionButton(title: "未対応に戻す", style: .secondary) { reopen() }
+            } else {
+                ActionButton(title: "問題なしにする", style: .secondary) { dismissFindings() }
+            }
+        }
+        .frame(maxWidth: Metrics.readableWidth)
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.s)
+        .frame(maxWidth: .infinity)
+        .background(Color.ground)
+    }
+
+    // 操作（レイアウトと混ぜないよう、body の外に置く）
+
+    private func dismissFindings() {
+        Task {
+            await state.dismiss(record: photo.record)
+            await onDispositionChange()
+        }
+    }
+
+    private func reopen() {
+        Task {
+            await state.reopen(record: photo.record)
+            await onDispositionChange()
+        }
     }
 
     private var header: some View {

@@ -17,6 +17,9 @@ struct ReportItemPhoto: Sendable, Equatable, Identifiable {
     /// この写真に写っている種類。結果票の表と同じ順で、開いている項目自身も含む。
     /// 「住所の写真」に電話番号も写っていることを、一覧の時点で見せるため
     let kinds: [FindingKind]
+    /// この写真は対応済みか（「問題なし」にした）。
+    /// 既定値を持つのは、この項目を後から足したため（memberwise init の既存呼び出しを壊さない）
+    var isHandled: Bool = false
 
     var id: String { record.assetID }
 }

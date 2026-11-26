@@ -12,9 +12,16 @@ extension ScanReportPolicy {
     /// - **危険が先、その中で新しい写真が先**。先に見るべきものを上に置く。
     ///   撮った日が分からない写真は最後。それでも並びが決まらなければ ID の順（開くたびに順序が変わらないように）
     ///
-    /// assets は撮った日を引くためだけに使う。assets に無い記録（写真アプリで消した写真）は出さない
-    func photos(of kind: FindingKind, in records: [ScanRecord], assets: [AssetMetadata]) -> [ReportItemPhoto] {
+    /// assets は撮った日を引くためだけに使う。assets に無い記録（写真アプリで消した写真）は出さない。
+    /// dispositions があれば、対応済みの写真に印を付ける（並び順は変えない。分けて見せるのは画面の役目）
+    func photos(
+        of kind: FindingKind,
+        in records: [ScanRecord],
+        assets: [AssetMetadata],
+        dispositions: [PhotoDisposition] = []
+    ) -> [ReportItemPhoto] {
         let assetByID = Dictionary(assets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let dispositionByID = Dictionary(dispositions.map { ($0.assetID, $0) }, uniquingKeysWith: { _, newer in newer })
 
         let photos: [ReportItemPhoto] = records.compactMap { record in
             guard let asset = assetByID[record.assetID] else { return nil }
@@ -26,11 +33,26 @@ extension ScanReportPolicy {
                 record: record,
                 takenAt: asset.creationDate,
                 verdict: verdict(for: kind, severity: severity),
-                kinds: Self.itemOrder.filter(present.contains)
+                kinds: Self.itemOrder.filter(present.contains),
+                isHandled: dispositionByID[record.assetID].map {
+                    isActive($0, modificationDate: record.modificationDate, isPresent: true)
+                } ?? false
             )
         }
 
         return photos.sorted(by: Self.comesFirst)
+    }
+
+    /// その写真に付ける対応を組み立てる。写っていた種類は、表と同じ順で残す
+    func disposition(_ action: PhotoDisposition.Action, for record: ScanRecord, decidedAt: Date) -> PhotoDisposition {
+        let present = Set(record.findings.map(\.kind))
+        return PhotoDisposition(
+            assetID: record.assetID,
+            action: action,
+            decidedAt: decidedAt,
+            modificationDate: record.modificationDate,
+            kinds: Self.itemOrder.filter(present.contains)
+        )
     }
 
     /// 写真詳細に出す所見。種類ごとに1行にまとめ、結果票の表と同じ順に並べる。

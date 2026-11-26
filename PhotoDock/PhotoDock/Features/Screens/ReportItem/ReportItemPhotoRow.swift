@@ -24,7 +24,11 @@ struct ReportItemPhotoRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                     Text(photo.takenAt?.reportDayText ?? "撮影日不明")
                         .font(.rowLabel)
-                    if photo.verdict == .danger {
+                    if photo.isHandled {
+                        Text("問題なし")
+                            .font(.label)
+                            .foregroundStyle(Color.themeAccent)
+                    } else if photo.verdict == .danger {
                         Text(photo.verdict.label)
                             .font(.label)
                             .foregroundStyle(Color.danger)
@@ -45,7 +49,7 @@ struct ReportItemPhotoRow: View {
                 .accessibilityHidden(true)
         }
         .padding(Spacing.s)
-        .background(photo.verdict == .danger ? Color.dangerSurface : Color.clear, in: .rect)
+        .background(photo.verdict == .danger && !photo.isHandled ? Color.dangerSurface : Color.clear, in: .rect)
         .contentShape(.rect)
         .task { await thumbnail.load(assetID: photo.id, maxPixelSize: Int(Metrics.thumbnailSize * displayScale)) }
         .accessibilityElement(children: .ignore)
@@ -84,7 +88,8 @@ struct ReportItemPhotoRow: View {
     private var accessibilityText: String {
         let day = photo.takenAt?.reportDayText ?? "撮影日不明"
         let kinds = photo.kinds.map(\.label).joined(separator: "、")
-        return "\(day)、\(photo.verdict.label)、\(kinds)"
+        let state = photo.isHandled ? "問題なしにした写真" : photo.verdict.label
+        return "\(day)、\(state)、\(kinds)"
     }
 }
 

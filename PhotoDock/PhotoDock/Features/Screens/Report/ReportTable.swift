@@ -24,7 +24,7 @@ struct ReportTable: View {
             ForEach(items) { item in
                 Divider().overlay(Color.hairline)
 
-                if let onSelect, item.photoCount > 0 {
+                if let onSelect, item.hasPhotos {
                     Button {
                         onSelect(item.kind)
                     } label: {
@@ -73,7 +73,7 @@ struct ReportTable: View {
                 .font(item.verdict.isEmphasized ? .rowValue : .rowLabel)
                 .foregroundStyle(isPending(item) ? Color.inkSecondary : item.verdict.tint)
                 .frame(minWidth: Self.verdictWidth, alignment: .leading)
-            Text(item.photoCount.formatted())
+            Text(item.displayCount.formatted())
                 .font(item.photoCount > 0 ? .rowValue : .rowLabel)
                 .monospacedDigit()
                 .foregroundStyle(item.photoCount > 0 ? Color.ink : Color.inkSecondary)
@@ -85,7 +85,7 @@ struct ReportTable: View {
         .background(item.verdict == .danger ? Color.dangerSurface : Color.clear, in: .rect)
         .contentShape(.rect)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(item.kind.label)、\(verdictLabel(item))、\(item.photoCount.formatted()) 枚")
+        .accessibilityLabel("\(item.kind.label)、\(verdictLabel(item))、\(item.displayCount.formatted()) 枚")
     }
 
     /// 所見のない行で、まだ結果が出そろっていない
