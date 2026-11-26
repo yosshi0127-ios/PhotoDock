@@ -20,9 +20,7 @@ struct ScanUnavailableView: View {
         switch access {
         case .denied:
             ContentUnavailableView {
-                Label("写真へのアクセスが許可されていません", systemImage: "lock")
-            } description: {
-                Text("設定アプリで許可すると、カメラロールの診断ができます。")
+                Label("写真にアクセスできません", systemImage: "lock")
             } actions: {
                 Button("設定を開く", action: openSettings)
             }
@@ -30,8 +28,6 @@ struct ScanUnavailableView: View {
         case .restricted:
             ContentUnavailableView {
                 Label("写真へのアクセスが制限されています", systemImage: "lock.slash")
-            } description: {
-                Text("機能制限により、このデバイスでは許可できません。")
             }
 
         case .notDetermined, .full, .limited:

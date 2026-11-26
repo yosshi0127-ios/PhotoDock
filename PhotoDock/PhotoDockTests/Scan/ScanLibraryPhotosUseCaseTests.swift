@@ -315,7 +315,7 @@ struct ScanLibraryPhotosUseCaseTests {
         let records = await scanAll(assets(5), pixels: ConcurrencyProbePixelSourceService(), continuation: spy)
 
         #expect(records.count == 5)
-        #expect(await spy.begun == [ContinuedWork(title: "写真を診断しています", subtitle: "0 / 5 枚", totalUnits: 5)])
+        #expect(await spy.begun == [ContinuedWork(title: "診断中", subtitle: "0 / 5 枚", totalUnits: 5)])
         #expect(await spy.ended == [true])
     }
 

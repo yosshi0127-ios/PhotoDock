@@ -58,19 +58,16 @@ struct PhotoDetailView: View {
     @ViewBuilder
     private var actions: some View {
         if state.didFailToRemove {
-            footnote("写真を変更できませんでした。写真アプリで確認してください。", color: .danger)
+            footnote("変更できませんでした", color: .danger)
         }
         if state.didFailToSave {
-            footnote("保存できませんでした。もう一度お試しください。", color: .danger)
-        }
-        if state.isDismissed {
-            footnote("問題なしにしました。結果票では対応済みに数えます。", color: .inkSecondary)
+            footnote("保存できませんでした", color: .danger)
         }
 
-        ActionButton(title: "非表示アルバムへ移す") { remove(.hide) }
-        ActionButton(title: "削除する", style: .secondary) { remove(.delete) }
+        ActionButton(title: "非表示") { remove(.hide) }
+        ActionButton(title: "削除", style: .secondary) { remove(.delete) }
         // 写真を動かさない対応は、控えめに置く（上の2つと取り違えないように）
-        Button(state.isDismissed ? "未対応に戻す" : "問題なしにする") {
+        Button(state.isDismissed ? "未対応に戻す" : "問題なし") {
             if state.isDismissed { reopen() } else { dismissFindings() }
         }
         .font(.action)
@@ -83,11 +80,11 @@ struct PhotoDetailView: View {
     private func removedNote(_ method: RemovePhotoUseCase.Method) -> some View {
         switch method {
         case .hide:
-            footnote("非表示アルバムへ移しました。写真アプリの「非表示」で確認できます。", color: .inkSecondary)
+            footnote("非表示にしました", color: .inkSecondary)
         case .delete:
-            footnote("削除しました。写真アプリの「最近削除した項目」に30日間残ります。", color: .inkSecondary)
+            footnote("削除しました（30日は復元できます）", color: .inkSecondary)
         }
-        ActionButton(title: "一覧に戻る") { close() }
+        ActionButton(title: "戻る") { close() }
     }
 
     private func footnote(_ text: String, color: Color) -> some View {
@@ -126,9 +123,6 @@ struct PhotoDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("写真の所見")
-                .font(.label)
-                .foregroundStyle(Color.inkSecondary)
             Text(photo.takenAt?.reportDayText ?? "撮影日不明")
                 .font(.screenTitle)
         }
@@ -149,9 +143,9 @@ struct PhotoDetailView: View {
             // 読み込み中も、読み込めなかったときも、同じ大きさの枠を置く（下の表が動かないように）
             Group {
                 if state.isLoadingImage {
-                    ProgressView("写真を読み込んでいます")
+                    ProgressView()
                 } else {
-                    Text("写真を表示できませんでした")
+                    Text("表示できません")
                         .foregroundStyle(Color.inkSecondary)
                 }
             }
@@ -164,17 +158,17 @@ struct PhotoDetailView: View {
 
     /// 経路ごとの札は出さない。いま見つけるのは写真に写っているものだけで、どの方法でも結果が同じため
     private var sharingNote: some View {
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("この写真を渡すと")
-                .font(.sectionTitle)
+        Label {
             Text(photo.kinds.sharingNote)
-                .font(.note)
-                .foregroundStyle(Color.inkSecondary)
+        } icon: {
+            Image(systemName: "paperplane")
+                .accessibilityHidden(true)
         }
+        .font(.note)
+        .foregroundStyle(Color.inkSecondary)
         .padding(Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.cardRadius))
-        .accessibilityElement(children: .combine)
     }
 }
 

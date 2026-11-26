@@ -49,7 +49,7 @@ struct ScanHomeView: View {
     private var content: some View {
         switch state.phase {
         case .loading:
-            ProgressView("カメラロールを確認しています")
+            ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.ground)
 

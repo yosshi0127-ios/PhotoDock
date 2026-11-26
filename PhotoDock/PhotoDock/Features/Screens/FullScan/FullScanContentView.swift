@@ -39,9 +39,6 @@ struct FullScanContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("写真ドック")
-                .font(.label)
-                .foregroundStyle(Color.inkSecondary)
             Text(title)
                 .font(.screenTitle)
             if let subtitle {
@@ -54,9 +51,9 @@ struct FullScanContentView: View {
 
     private var title: String {
         switch phase {
-        case .idle, .scanning: "診断しています"
-        case .interrupted: "診断が止まりました"
-        case .finished: "診断が終わりました"
+        case .idle, .scanning: "診断中"
+        case .interrupted: "中断"
+        case .finished: "診断完了"
         }
     }
 
@@ -65,9 +62,9 @@ struct FullScanContentView: View {
         case .idle, .scanning:
             nil
         case let .interrupted(report):
-            "残り \((total - report.total).formatted()) 枚です。続きから再開できます。"
+            "残り \((total - report.total).formatted()) 枚"
         case let .finished(report):
-            "\(report.total.formatted()) 枚を確認しました ・ 所要時間 \(elapsedText)"
+            "\(report.total.formatted()) 枚 ・ \(elapsedText)"
         }
     }
 
@@ -88,7 +85,7 @@ struct FullScanContentView: View {
         case let .scanning(report):
             ScanProgressCard(completed: report.total, total: total, remainingSeconds: remainingSeconds)
             ReportTable(items: report.items, pendingLabel: "確認中", onSelect: onSelect)
-            notice("このアプリを開いたままにしてください。閉じると止まることがありますが、続きから再開できます。")
+            notice("アプリは開いたままに")
 
         case let .interrupted(report):
             ScanProgressCard(completed: report.total, total: total)
@@ -100,7 +97,7 @@ struct FullScanContentView: View {
             ReportTable(items: report.items, onSelect: onSelect)
             if report.undiagnosed > 0 {
                 // 内訳（iCloud にある・読み取れなかった等）と対処は、結果票のほうに出す
-                notice("診断できていない写真が \(report.undiagnosed.formatted()) 枚あります。内訳は結果票で確認できます。")
+                notice("未診断 \(report.undiagnosed.formatted()) 枚")
             }
         }
     }
@@ -124,12 +121,12 @@ struct FullScanContentView: View {
         VStack(spacing: Spacing.xs) {
             switch phase {
             case .idle, .scanning:
-                ActionButton(title: "中断する", style: .secondary) { onStop() }
+                ActionButton(title: "中断", style: .secondary) { onStop() }
             case .interrupted:
-                ActionButton(title: "続きを診断する") { onResume() }
-                ActionButton(title: "結果票に戻る", style: .secondary) { onClose() }
+                ActionButton(title: "続きを診断") { onResume() }
+                ActionButton(title: "結果票へ", style: .secondary) { onClose() }
             case .finished:
-                ActionButton(title: "結果票に戻る") { onClose() }
+                ActionButton(title: "結果票へ") { onClose() }
             }
         }
         .frame(maxWidth: Metrics.readableWidth)
