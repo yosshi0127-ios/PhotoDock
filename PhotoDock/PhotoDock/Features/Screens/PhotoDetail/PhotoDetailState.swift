@@ -27,10 +27,20 @@ final class PhotoDetailState {
     /// 対応を保存できなかった。次に押して成功するまで出す
     private(set) var didFailToSave = false
 
+    /// この画面で、写真を非表示にした・削除した。写真はもうアプリから見えないので、以後の操作は出さない
+    private(set) var removal: RemovePhotoUseCase.Method?
+
+    /// 非表示・削除ができなかった（ユーザーがやめた場合は含めない）
+    private(set) var didFailToRemove = false
+
+    /// iOS の確認に答えるのを待っている。その間は、ほかのボタンを押せなくする
+    private(set) var isWorking = false
+
     // 依存は UseCase 経由のみ
     private let loadThumbnail = LoadThumbnailUseCase()
     private let dismissPhoto = DismissPhotoUseCase()
     private let reopenPhoto = ReopenPhotoUseCase()
+    private let removePhoto = RemovePhotoUseCase()
     private let reportPolicy = ScanReportPolicy()
 
     private var didShow = false
@@ -67,6 +77,24 @@ final class PhotoDetailState {
             didFailToSave = false
         } catch {
             didFailToSave = true
+        }
+    }
+
+    /// 「非表示アルバムへ移す」「削除する」。確認は iOS が出す。
+    /// 「許可しない」が選ばれたら何も変えない（失敗の文言も出さない）
+    func remove(_ method: RemovePhotoUseCase.Method, record: ScanRecord) async {
+        guard !isWorking, removal == nil else { return }
+        isWorking = true
+        defer { isWorking = false }
+
+        switch await removePhoto(method, record: record) {
+        case .done:
+            removal = method
+            didFailToRemove = false
+        case .cancelled:
+            didFailToRemove = false
+        case .notFound, .failed:
+            didFailToRemove = true
         }
     }
 }

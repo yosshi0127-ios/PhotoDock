@@ -35,6 +35,14 @@ final class FullScanState {
     /// （3万枚でも、本文を持たない記録なので数MB）
     private var records: [ScanRecord] = []
 
+    /// この画面を開いたあとに、非表示・削除した写真
+    private var removedIDs: Set<String> = []
+
+    /// 診断の対象のうち、いまもライブラリにある写真
+    private var presentAssets: [AssetMetadata] {
+        removedIDs.isEmpty ? assets : assets.filter { !removedIDs.contains($0.id) }
+    }
+
     /// ユーザーが選んだ対応。診断を始めるときに読み、写真詳細で付け外ししたら読み直す
     private var dispositions: [PhotoDisposition] = []
 
@@ -57,7 +65,7 @@ final class FullScanState {
 
     /// 結果票の項目を開いたときに並べる写真。診断中は、その時点までに見つかった分
     func photos(of kind: FindingKind) -> [ReportItemPhoto] {
-        reportPolicy.photos(of: kind, in: flagged, assets: assets, dispositions: dispositions)
+        reportPolicy.photos(of: kind, in: flagged, assets: presentAssets, dispositions: dispositions)
     }
 
     /// ここまでの結果票の、その項目の行（判定と枚数）
@@ -107,9 +115,15 @@ final class FullScanState {
 
     /// 写真詳細で対応を付け外ししたあとに呼ぶ。対応を読み直して、ここまでの結果票を作り直す
     func reloadDispositions() async {
+        let known = Set(dispositions.map(\.assetID))
         dispositions = await loadDispositions()
+        // この画面を開いたあとに非表示・削除した写真。診断の対象の一覧（assets）は開始時点のものなので、
+        // ここで外す（外さないと、もう無い写真が未対応として残る）
+        removedIDs.formUnion(
+            dispositions.filter { $0.action != .dismissed && !known.contains($0.assetID) }.map(\.assetID)
+        )
         let rebuilt = reportPolicy.report(
-            from: records, presentAssetIDs: Set(assets.map(\.id)), dispositions: dispositions
+            from: records, presentAssetIDs: Set(presentAssets.map(\.id)), dispositions: dispositions
         )
         switch phase {
         case .idle: break
@@ -136,6 +150,7 @@ final class FullScanState {
         self.assets = assets
         flagged = []   // 再診断で前回の結果を残さない
         self.records = []
+        removedIDs = []
         elapsedSeconds = 0
         remainingSeconds = nil
         phase = .scanning(reportPolicy.empty)

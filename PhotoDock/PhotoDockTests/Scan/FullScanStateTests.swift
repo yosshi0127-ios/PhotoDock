@@ -169,6 +169,27 @@ struct FullScanStateTests {
         #expect(state.item(of: .cardNumber)?.verdict == .handled)
     }
 
+    /// 診断の対象の一覧は開始時点のもの。外さないと、もう無い写真が未対応として残る
+    @Test("この画面を開いたあとに非表示・削除した写真は、結果票と一覧から外れ、対応済みに数える")
+    func removedPhotoLeavesTheReport() async {
+        let dispositions = SpyPhotoDispositionRepository()
+        let state = makeState(pixels: makePixels(), ocr: SpyOCRService(texts: cardText), dispositions: dispositions)
+        await start(state, assets: twoAssets)
+
+        try? await dispositions.save(PhotoDisposition(
+            assetID: "1", action: .hidden, decidedAt: Date(timeIntervalSince1970: 1_750_000_000),
+            modificationDate: nil, kinds: [.cardNumber]
+        ))
+        await state.reloadDispositions()
+
+        #expect(state.photos(of: .cardNumber).map(\.id) == ["2"])
+        #expect(state.report.dangerPhotos == 1)
+        #expect(state.report.handledPhotos == 1)
+        #expect(state.item(of: .cardNumber) == ScanReport.Item(kind: .cardNumber, verdict: .danger, photoCount: 1, handledCount: 1))
+        // 見えなくなった写真は、診断した枚数からも外れる
+        #expect(state.report.diagnosed == 1)
+    }
+
     /// 所見ゼロの写真まで溜めると、一覧が全件になってしまう
     @Test("所見がなければ一覧は空のまま")
     func noFlaggedWhenClean() async {
