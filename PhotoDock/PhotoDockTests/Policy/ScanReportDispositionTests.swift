@@ -109,13 +109,14 @@ struct ScanReportDispositionTests {
         #expect(report.handledPhotos == 0)
     }
 
-    @Test("顔だけの写真を対応しても、写真の枚数（総合判定の側）には数えない")
-    func handledFaceOnlyIsNotCountedAsPhoto() {
+    @Test("顔だけの写真を対応したら、ほかの写真と同じく対応済みに数える")
+    func handledFaceOnlyIsCounted() {
         let records = [record("a", [finding(.bystanderFace)])]
 
         let report = sut.report(from: records, presentAssetIDs: ["a"], dispositions: [disposition("a", .dismissed)])
 
-        #expect(report.handledPhotos == 0)
+        #expect(report.handledPhotos == 1)
+        #expect(report.grade == .a)
         #expect(item(.bystanderFace, in: report) == ScanReport.Item(
             kind: .bystanderFace, verdict: .handled, photoCount: 0, handledCount: 1
         ))

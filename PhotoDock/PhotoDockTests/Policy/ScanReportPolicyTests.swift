@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import PhotoDock
 
-/// 結果票の数え方。総合判定は写真の枚数、表は項目ごとの枚数、顔は参考、の3点を固定する
+/// 結果票の数え方。総合判定は写真の枚数、表は項目ごとの枚数、顔もほかと同じ、の3点を固定する
 @Suite("ScanReportPolicy")
 struct ScanReportPolicyTests {
     private let sut = ScanReportPolicy()
@@ -166,24 +166,24 @@ struct ScanReportPolicyTests {
         #expect(item(.cardNumber, in: dangerFirst)?.photoCount == 2)
     }
 
-    // MARK: - 顔は参考
+    // MARK: - 顔も、ほかの項目と同じ
 
-    /// 実機では所見 51枚のうち 42枚が顔だった。判定に入れると顔だけで B になる
-    @Test("顔だけの写真は総合判定に数えず、項目には参考として出す")
-    func faceOnlyPhotoIsReference() {
+    /// 以前は「参考」として総合判定から外していた。判定の意味が伝わらなかったので、同じ扱いにした
+    @Test("顔だけの写真も、要確認として総合判定に数える")
+    func faceOnlyPhotoCountsAsCaution() {
         let report = sut.report(from: [
             record("1", .scanned([finding(.bystanderFace)])),
             record("2", .scanned([finding(.bystanderFace)]))
         ])
 
-        #expect(report.grade == .a)
-        #expect(report.attentionPhotos == 0)
-        #expect(item(.bystanderFace, in: report)?.verdict == .reference)
+        #expect(report.grade == .b)
+        #expect(report.cautionPhotos == 2)
+        #expect(item(.bystanderFace, in: report)?.verdict == .caution)
         #expect(item(.bystanderFace, in: report)?.photoCount == 2)
     }
 
-    @Test("顔と文字の両方が写った写真は、文字の所見で判定に数える")
-    func faceWithTextCountsByText() {
+    @Test("顔と文字の両方が写った写真は、写真としては1回だけ数える")
+    func faceWithTextCountsOnce() {
         let report = sut.report(from: [
             record("1", .scanned([finding(.bystanderFace), finding(.address)]))
         ])

@@ -108,11 +108,11 @@ struct ScanReportItemPhotosTests {
         #expect(sut.photos(of: .credential, in: records, assets: [asset("a")]).first?.verdict == .danger)
     }
 
-    @Test("顔の写り込みは、段階によらず参考")
+    @Test("顔の写り込みも、所見の段階で判定が決まる")
     func faceIsReference() {
         let records = [record("a", [finding(.bystanderFace, .caution)])]
 
-        #expect(sut.photos(of: .bystanderFace, in: records, assets: [asset("a")]).first?.verdict == .reference)
+        #expect(sut.photos(of: .bystanderFace, in: records, assets: [asset("a")]).first?.verdict == .caution)
     }
 
     @Test("撮った日は写真から引く。無ければ nil")
@@ -189,11 +189,11 @@ struct ScanReportItemPhotosTests {
         #expect(sut.findings(in: photo) == [ReportPhotoFinding(kind: .credential, verdict: .danger, placeCount: 2)])
     }
 
-    @Test("顔の写り込みの行は参考")
+    @Test("顔の写り込みの行も、ほかと同じ判定になる")
     func faceRowIsReference() {
         let photo = record("a", [finding(.bystanderFace), finding(.bystanderFace)])
 
-        #expect(sut.findings(in: photo) == [ReportPhotoFinding(kind: .bystanderFace, verdict: .reference, placeCount: 2)])
+        #expect(sut.findings(in: photo) == [ReportPhotoFinding(kind: .bystanderFace, verdict: .caution, placeCount: 2)])
     }
 
     @Test("所見が無い写真・診断できなかった写真は、行が無い")

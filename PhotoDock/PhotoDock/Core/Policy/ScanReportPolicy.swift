@@ -10,17 +10,16 @@ import Foundation
 /// 1件ずつ足す形（`adding`）を基本にしてある。診断中の画面は記録が流れてくるたびに
 /// 結果票を更新するので、毎回全件を数え直すと 3万枚で二乗の手間になる
 struct ScanReportPolicy: Sendable {
-    /// 表の行の順。危険になりうる項目を上に、参考を最後に置く
+    /// 表の行の順。危険になりうる項目を上に、文字でない項目（顔）を最後に置く
     static let itemOrder: [FindingKind] = [
         .cardNumber, .credential, .identityDocumentNumber,
         .address, .phoneNumber, .email, .postalCode,
         .bystanderFace
     ]
 
-    /// 総合判定に数えない項目。
-    /// 顔の写り込みは幾何だけの推定で外れが多く、実機では所見の8割を占めた
-    /// （853枚中 51枚に所見、うち 42枚が顔）。判定に入れると顔だけで B になる
-    static let referenceKinds: Set<FindingKind> = [.bystanderFace]
+    // 顔の写り込みも、ほかの項目と同じに数える（2026-11-26）。
+    // 以前は「参考」として総合判定から外していた（顔は幾何だけの推定で外れが多く、実機では所見の8割を占めた）。
+    // ただ「参考」という判定の意味が伝わらなかったので、やめた。brief「結果票」参照
 
     /// まだ何も診断していない結果票。行は最初から全項目ぶん並べる
     var empty: ScanReport {
@@ -111,8 +110,7 @@ struct ScanReportPolicy: Sendable {
 
     /// 対応済みの写真1枚ぶん。危険・要確認には数えず、写っていた種類それぞれの「対応済み」に数える
     private func addHandled(kinds: Set<FindingKind>, to report: inout ScanReport) {
-        // 写真の枚数: 参考の項目だけの写真は、もともと総合判定に数えていないので、対応済みにも数えない
-        if !kinds.isSubset(of: Self.referenceKinds) {
+        if !kinds.isEmpty {
             report.handledPhotos += 1
         }
 
@@ -126,9 +124,8 @@ struct ScanReportPolicy: Sendable {
     }
 
     private func addFindings(_ findings: [StoredFinding], to report: inout ScanReport) {
-        // 写真の枚数: 参考の項目を除いた所見のうち、最も高い段階で1回だけ数える
-        let judged = findings.filter { !Self.referenceKinds.contains($0.kind) }
-        switch judged.highestSeverity {
+        // 写真の枚数: 所見のうち、最も高い段階で1回だけ数える
+        switch findings.highestSeverity {
         case .danger: report.dangerPhotos += 1
         case .caution: report.cautionPhotos += 1
         case nil: break
