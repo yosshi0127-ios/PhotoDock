@@ -143,10 +143,13 @@ final class FullScanState {
         // 新しいものを先頭に。項目を開いたとき、見つかったばかりの写真が上に来る
         if record.isFlagged { flagged.insert(record, at: 0) }
         elapsedSeconds = progress.elapsedSeconds
+        let remaining = total - progress.report.total
+        // 見込みが外れても（端末から消えた・新しく来た）、まだ結果の出ていない枚数は超えない
+        let toDiagnose = max(0, min(expectedToDiagnose - progress.diagnosedNow, remaining))
         remainingSeconds = progressPolicy.remainingSeconds(
             diagnosedNow: progress.diagnosedNow,
-            // 見込みが外れても（端末から消えた・新しく来た）、まだ結果の出ていない枚数は超えない
-            remaining: min(expectedToDiagnose - progress.diagnosedNow, total - progress.report.total),
+            remainingToDiagnose: toDiagnose,
+            remainingQuick: remaining - toDiagnose,
             elapsedSeconds: elapsedSeconds
         )
         phase = .scanning(progress.report)
