@@ -15,7 +15,7 @@
   <tr>
     <td><img src="docs/images/01-home.png" width="240" alt="診断結果票。総合判定は C で要対応3枚。項目ごとに判定と枚数が並び、カード番号とパスワード・認証情報が危険、住所や電話番号などが要確認"></td>
     <td><img src="docs/images/02-scanning.png" width="240" alt="診断中。14枚のうち6枚まで進み、結果票の表が途中まで埋まっている。まだ所見のない項目は確認中と表示される"></td>
-    <td><img src="docs/images/03-detail.png" width="240" alt="写真詳細。カード番号の位置に赤い枠が重なり、種類と危険度が表示される"></td>
+    <td><img src="docs/images/03-detail.png" width="240" alt="写真詳細。カード番号の位置に赤い枠が重なり、下に「カード番号 危険」の行と、この写真を渡すと文字がそのまま残るという説明が出る"></td>
   </tr>
 </table>
 
@@ -28,8 +28,8 @@
 | はじめての案内 | 3つの約束（端末の中だけで診断する・写真は書き換えない・読み取った文字は残さない）を示してから、写真へのアクセスを確認する |
 | 診断結果票（ホーム） | 前回までの診断を、総合判定と項目ごとの判定・枚数で表示する。開いただけでは診断しない。新しい写真があれば、その枚数だけを診断できる。iCloud にある写真も診断するかを選べる |
 | 診断中 | 進捗と残り時間を出し、結果票の表を1枚ごとに埋めていく。所見のあった項目は診断中から開ける。中断でき、続きから再開できる |
-| 項目の写真 | 結果票の行を押すと、その種類が写っている写真だけを一覧表示する |
-| 写真詳細 | 写真の上に所見の位置を枠で示し、種類と危険度を一覧表示する |
+| 項目の写真 | 結果票の行を押すと、その種類が写っている写真を1枚1行で一覧表示する。撮った日と、その写真に写っているほかの種類も分かる。危険が先、新しい写真が先に並ぶ |
+| 写真詳細 | 写真の上に所見の位置を枠で示し、種類ごとの判定（危険・要確認・参考）を一覧表示する |
 
 ## 検出できるもの
 
@@ -127,7 +127,7 @@ graph TD
 xcodebuild build -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 
-# テスト（単体テスト 234 件 + UI テスト 2 件）
+# テスト（単体テスト 238 件 + UI テスト 2 件）
 xcodebuild test  -project PhotoDock/PhotoDock.xcodeproj -scheme PhotoDock \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
 ```

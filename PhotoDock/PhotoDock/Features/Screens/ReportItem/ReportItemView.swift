@@ -63,7 +63,7 @@ struct ReportItemView: View {
                         Divider().overlay(Color.hairline)
                     }
                     NavigationLink {
-                        PhotoDetailView(record: photo.record)
+                        PhotoDetailView(photo: photo)
                     } label: {
                         ReportItemPhotoRow(photo: photo, openedKind: kind)
                     }
