@@ -11,10 +11,6 @@ struct ScanHomeView: View {
     /// 表の行を押して開いている項目
     @State private var selectedKind: FindingKind?
 
-    /// 「iCloud の写真も診断する」。既定オフ（ユーザーの回線を勝手に使わない）。
-    /// 表示の設定なので View が持つ（@AppStorage は @Observable の中では更新が伝わらない）
-    @AppStorage("allowsCloudDownload") private var allowsCloudDownload = false
-
     var body: some View {
         @Bindable var state = state
 
@@ -24,8 +20,8 @@ struct ScanHomeView: View {
                 FullScanView(
                     assets: assets,
                     quality: state.quality,
-                    allowsDownload: allowsCloudDownload,
-                    expectedToDiagnose: expectedToDiagnose
+                    allowsDownload: state.scanAllowsDownload,
+                    expectedToDiagnose: state.expectedToDiagnose
                 )
             }
             .navigationDestination(item: $selectedKind) { kind in
@@ -34,6 +30,16 @@ struct ScanHomeView: View {
                     await state.load()
                 }
             }
+            .sheet(isPresented: $state.isCloudConfirmPresented, onDismiss: { cloudConfirmDidDismiss() }, content: {
+                if let estimate = state.cloudEstimate {
+                    CloudScanConfirmView(
+                        estimate: estimate,
+                        isOffWiFi: state.isOffWiFi,
+                        onStart: { confirmCloudScan() },
+                        onCancel: { cancelCloudScan() }
+                    )
+                }
+            })
             // 表示されるたびに読み直す（診断から戻ったときに結果票を更新するため）。
             // 読むだけなので、途中で打ち切られても前の表示が残るだけ
             .task { await state.load() }
@@ -58,8 +64,8 @@ struct ScanHomeView: View {
                 ReportHomeView(
                     content: content,
                     report: report,
-                    allowsCloudDownload: $allowsCloudDownload,
                     onScan: { startScan() },
+                    onCloudScan: { askCloudScan() },
                     onSelect: { select($0) }
                 )
             } else {
@@ -75,6 +81,22 @@ struct ScanHomeView: View {
         Task { await state.allowAccessAndStartScan() }
     }
 
+    private func askCloudScan() {
+        state.askCloudScan()
+    }
+
+    private func confirmCloudScan() {
+        Task { await state.confirmCloudScan() }
+    }
+
+    private func cancelCloudScan() {
+        state.isCloudConfirmPresented = false
+    }
+
+    private func cloudConfirmDidDismiss() {
+        state.cloudConfirmDidDismiss()
+    }
+
     private func startScan() {
         state.startScan()
     }
@@ -86,15 +108,6 @@ struct ScanHomeView: View {
     /// 診断の対象。診断できる状態でしか診断画面は出ない
     private var assets: [AssetMetadata] {
         if case let .loaded(.ready(content)) = state.phase { content.assets } else { [] }
-    }
-
-    /// 実際に診断する見込みの枚数（残り時間の見積もり用）
-    private var expectedToDiagnose: Int {
-        if case let .loaded(.ready(content)) = state.phase {
-            content.pendingCount(allowsDownload: allowsCloudDownload)
-        } else {
-            0
-        }
     }
 }
 

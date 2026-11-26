@@ -9,8 +9,9 @@ import SwiftUI
 struct ReportHomeView: View {
     let content: ScanHomeContent
     let report: ScanReport
-    @Binding var allowsCloudDownload: Bool
     let onScan: () -> Void
+    /// 「iCloud の ◯ 枚も診断する」。確認の画面を出す
+    let onCloudScan: () -> Void
     let onSelect: (FindingKind) -> Void
 
     var body: some View {
@@ -43,14 +44,22 @@ struct ReportHomeView: View {
                 .font(.screenTitle)
             Group {
                 if let date = report.lastScannedAt {
-                    Text("\(date.reportDayText) 診断 ・ 診断した写真 \(report.diagnosed.formatted()) 枚")
+                    Text("\(date.reportDayText) 診断 ・ \(coverageText)")
                 } else {
-                    Text("診断した写真 \(report.diagnosed.formatted()) 枚")
+                    Text(coverageText)
                 }
             }
             .font(.note)
             .foregroundStyle(Color.inkSecondary)
         }
+    }
+
+    /// 見た範囲。診断できていない写真があるときは、全体のうち何枚を見たのかを言う
+    /// （「総合判定 B」が、ライブラリの3割だけの結果だと分かるように）
+    private var coverageText: String {
+        report.undiagnosed > 0
+            ? "\(report.total.formatted()) 枚のうち \(report.diagnosed.formatted()) 枚を診断"
+            : "診断した写真 \(report.diagnosed.formatted()) 枚"
     }
 
     // MARK: - 診断できていない写真
@@ -62,12 +71,9 @@ struct ReportHomeView: View {
             VStack(alignment: .leading, spacing: Spacing.s) {
                 if report.notAvailableLocally > 0 {
                     note("未診断 \(report.notAvailableLocally.formatted()) 枚", "iCloud にあり、端末にありません")
-                    Toggle("iCloud の写真も診断する", isOn: $allowsCloudDownload)
-                        .font(.rowLabel)
-                        .tint(Color.themeAccent)
-                    Text("Wi-Fi 接続時に取り寄せます（1枚あたり約2MB）")
-                        .font(.note)
-                        .foregroundStyle(Color.inkSecondary)
+                    ActionButton(
+                        title: "iCloud の \(report.notAvailableLocally.formatted()) 枚も診断する", style: .secondary
+                    ) { onCloudScan() }
                 }
                 if report.failed > 0 {
                     note("診断できなかった \(report.failed.formatted()) 枚", "文字を読み取れませんでした。次の診断でもう一度確認します")
@@ -106,7 +112,8 @@ struct ReportHomeView: View {
 
     /// 次の診断で実際に見る枚数
     private var pendingCount: Int {
-        content.pendingCount(allowsDownload: allowsCloudDownload)
+        // iCloud の写真は、下のボタンから別に始める（ここには数えない）
+        content.pendingCount(allowsDownload: false)
     }
 
     private var footer: some View {
@@ -129,25 +136,22 @@ private extension ScanHomeContent {
 }
 
 #Preview("B 要確認あり・iCloud に未診断") {
-    @Previewable @State var allows = false
     ReportHomeView(
         content: .preview(report: .previewCaution), report: .previewCaution,
-        allowsCloudDownload: $allows, onScan: {}, onSelect: { _ in }
+        onScan: {}, onCloudScan: {}, onSelect: { _ in }
     )
 }
 
 #Preview("C 危険あり・新しい写真 12 枚") {
-    @Previewable @State var allows = false
     ReportHomeView(
         content: .preview(report: .previewDanger, newPhotoCount: 12), report: .previewDanger,
-        allowsCloudDownload: $allows, onScan: {}, onSelect: { _ in }
+        onScan: {}, onCloudScan: {}, onSelect: { _ in }
     )
 }
 
 #Preview("A 所見なし・一部のみ許可") {
-    @Previewable @State var allows = false
     ReportHomeView(
         content: .preview(report: .previewClear, access: .limited), report: .previewClear,
-        allowsCloudDownload: $allows, onScan: {}, onSelect: { _ in }
+        onScan: {}, onCloudScan: {}, onSelect: { _ in }
     )
 }

@@ -15,12 +15,14 @@ struct ScanHomeStateTests {
     private func makeState(
         library: SpyPhotoLibraryService,
         records: SpyScanRecordRepository = SpyScanRecordRepository(),
-        dispositions: SpyPhotoDispositionRepository = SpyPhotoDispositionRepository()
+        dispositions: SpyPhotoDispositionRepository = SpyPhotoDispositionRepository(),
+        network: SpyNetworkStatusService = SpyNetworkStatusService(unmetered: true)
     ) -> ScanHomeState {
         withDependencies {
             $0.photoLibrary = library
             $0.scanRecords = records
             $0.photoDispositions = dispositions
+            $0.network = network
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             ScanHomeState()
@@ -175,5 +177,125 @@ struct ScanHomeStateTests {
 
         #expect(state.photos(of: .address).filter(\.isHandled).map(\.id) == ["done"])
         #expect(state.item(of: .address) == ScanReport.Item(kind: .address, verdict: .caution, photoCount: 1, handledCount: 1))
+    }
+
+    // MARK: - iCloud の写真
+
+    /// 端末にある1枚（診断済み）と、iCloud にしか無い2枚（未診断）
+    private func makeCloudState(network: SpyNetworkStatusService) -> ScanHomeState {
+        func unfetched(_ id: String) -> ScanRecord {
+            ScanRecord(
+                assetID: id, modificationDate: nil, scannedAt: Date(timeIntervalSince1970: 1_750_000_000),
+                quality: .precise,
+                generation: ScanRecordPolicy().generation(osVersion: ProcessInfo.processInfo.operatingSystemVersionString),
+                outcome: .notAvailableLocally
+            )
+        }
+        return makeState(
+            library: SpyPhotoLibraryService(access: .full, assets: [.stub(id: "local"), .stub(id: "c1"), .stub(id: "c2")]),
+            records: SpyScanRecordRepository(records: [record("local", []), unfetched("c1"), unfetched("c2")]),
+            network: network
+        )
+    }
+
+    @Test("iCloud に未診断の写真があれば、取り寄せの見積もりを出す")
+    func cloudEstimateCountsUnfetched() async {
+        let state = makeCloudState(network: SpyNetworkStatusService(unmetered: true))
+
+        await state.load()
+
+        #expect(state.cloudEstimate?.photoCount == 2)
+    }
+
+    @Test("未診断の写真が無ければ、見積もりは無く、確認の画面も出さない")
+    func noCloudEstimateWithoutUnfetched() async {
+        let state = makeState(
+            library: SpyPhotoLibraryService(access: .full, assets: [.stub(id: "local")]),
+            records: SpyScanRecordRepository(records: [record("local", [])])
+        )
+        await state.load()
+
+        state.askCloudScan()
+
+        #expect(state.cloudEstimate == nil)
+        #expect(!state.isCloudConfirmPresented)
+    }
+
+    /// 数GB の通信を、確認なしに始めない
+    @Test("iCloud の診断は、確認の画面を出すだけで、まだ始めない")
+    func askCloudScanOnlyPresentsConfirm() async {
+        let network = SpyNetworkStatusService(unmetered: true)
+        let state = makeCloudState(network: network)
+        await state.load()
+
+        state.askCloudScan()
+
+        #expect(state.isCloudConfirmPresented)
+        #expect(!state.isScanPresented)
+        #expect(!state.scanAllowsDownload)
+        #expect(await network.callCount == 0)
+    }
+
+    @Test("Wi-Fi なら、確認の画面を閉じ、閉じ終わってから取り寄せる診断に進む")
+    func confirmCloudScanStartsAfterDismiss() async {
+        let state = makeCloudState(network: SpyNetworkStatusService(unmetered: true))
+        await state.load()
+        state.askCloudScan()
+
+        await state.confirmCloudScan()
+        #expect(!state.isCloudConfirmPresented)
+        #expect(!state.isScanPresented)   // 閉じ終わるまでは進まない
+
+        state.cloudConfirmDidDismiss()
+        #expect(state.isScanPresented)
+        #expect(state.scanAllowsDownload)
+        // 残り時間の見積もりには、取り寄せるぶんも数える
+        #expect(state.expectedToDiagnose == 2)
+    }
+
+    /// 始めてから黙って取り寄せないまま終わると、理由が分からない
+    @Test("Wi-Fi でなければ、始めずに、その旨を出す")
+    func confirmCloudScanStopsOffWiFi() async {
+        let state = makeCloudState(network: SpyNetworkStatusService(unmetered: false))
+        await state.load()
+        state.askCloudScan()
+
+        await state.confirmCloudScan()
+        state.cloudConfirmDidDismiss()
+
+        #expect(state.isOffWiFi)
+        #expect(state.isCloudConfirmPresented)
+        #expect(!state.isScanPresented)
+        #expect(!state.scanAllowsDownload)
+    }
+
+    @Test("確認の画面を「やめる」で閉じたら、診断には進まない")
+    func cancelDoesNotStart() async {
+        let state = makeCloudState(network: SpyNetworkStatusService(unmetered: true))
+        await state.load()
+        state.askCloudScan()
+
+        state.isCloudConfirmPresented = false
+        state.cloudConfirmDidDismiss()
+
+        #expect(!state.isScanPresented)
+    }
+
+    /// 取り寄せは、その回だけ。設定として残ると、以後の診断でも毎回数GB を取り寄せる
+    @Test("取り寄せる診断のあと、ふつうの診断を始めたら、取り寄せない")
+    func cloudScanIsOneShot() async {
+        let state = makeCloudState(network: SpyNetworkStatusService(unmetered: true))
+        await state.load()
+        state.askCloudScan()
+        await state.confirmCloudScan()
+        state.cloudConfirmDidDismiss()
+        #expect(state.scanAllowsDownload)
+
+        state.isScanPresented = false
+        state.startScan()
+
+        #expect(state.isScanPresented)
+        #expect(!state.scanAllowsDownload)
+        #expect(state.expectedToDiagnose == 0)
     }
 }
