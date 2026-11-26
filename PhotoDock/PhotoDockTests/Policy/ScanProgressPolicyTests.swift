@@ -34,6 +34,16 @@ struct ScanProgressPolicyTests {
         #expect(sut.remainingSeconds(diagnosedNow: 100, remaining: 0, elapsedSeconds: 20) == nil)
     }
 
+    @Test("画像を読むところまで進んだ結果だけを、時間のかかる結果として数える")
+    func takesTimeOnlyWhenImageWasRead() {
+        #expect(sut.takesTime(.scanned([])))
+        #expect(sut.takesTime(.failed))
+        #expect(sut.takesTime(.unavailableInCloud))
+        // 端末に無い・見つからない写真は、画像を読む前に分かる
+        #expect(!sut.takesTime(.notAvailableLocally))
+        #expect(!sut.takesTime(.missing))
+    }
+
     /// 記録の再利用だけで進んだあいだは、今回診断した枚数が 0 のまま。
     /// 0 で割って無限大や非数を返さないこと
     @Test("今回まだ1枚も診断していなければ出さない")

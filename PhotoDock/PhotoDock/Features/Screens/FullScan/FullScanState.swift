@@ -41,6 +41,9 @@ final class FullScanState {
         }
     }
 
+    /// これから実際に診断する見込みの枚数。中断して再開したときは、診断し終えたぶんを引いてある
+    private var expectedToDiagnose = 0
+
     private let scanLibraryPhotos = ScanLibraryPhotosUseCase()
     private let reportPolicy = ScanReportPolicy()
     private let progressPolicy = ScanProgressPolicy()
@@ -59,9 +62,18 @@ final class FullScanState {
     /// 画面に入ったときの自動開始。一度走らせていれば何もしない。
     /// onAppear は画面に戻るたびに走るので、これを分けないと
     /// 一覧から戻ってくるたびに診断が始まってしまう。
-    /// 同期で返す: View がここを await すると State を掴み続け、画面を閉じても捨てられなくなる
-    func startIfNeeded(assets: [AssetMetadata], quality: ScanQuality, allowsDownload: Bool = false) {
+    /// 同期で返す: View がここを await すると State を掴み続け、画面を閉じても捨てられなくなる。
+    ///
+    /// expectedToDiagnose は実際に診断する見込みの枚数（残り時間の見積もり用）。
+    /// 分からなければ nil でよく、そのときは全件を診断する前提で見積もる
+    func startIfNeeded(
+        assets: [AssetMetadata],
+        quality: ScanQuality,
+        allowsDownload: Bool = false,
+        expectedToDiagnose: Int? = nil
+    ) {
         guard case .idle = phase else { return }
+        self.expectedToDiagnose = expectedToDiagnose ?? assets.count
         launch(assets: assets, quality: quality, allowsDownload: allowsDownload)
     }
 
@@ -91,7 +103,7 @@ final class FullScanState {
         phase = .scanning(reportPolicy.empty)
 
         let records = scanLibraryPhotos(assets: assets, quality: quality, allowsDownload: allowsDownload)
-        scanTask = Task { [weak self, reportPolicy] in
+        scanTask = Task { [weak self, reportPolicy, progressPolicy] in
             var progress = Progress(report: reportPolicy.empty)
 
             for await record in records {
@@ -99,8 +111,11 @@ final class FullScanState {
                 // 弱参照にして、消えていたらここで止める（deinit の cancel が先に効くのが普通で、これは保険）
                 guard let self else { return }
                 progress.report = reportPolicy.adding(record, to: progress.report)
-                // 今回診断した記録は、開始より後の日時を持つ。再利用した記録は前回の日時のまま
-                if record.scannedAt >= progress.startedAt { progress.diagnosedNow += 1 }
+                // 今回診断した記録は、開始より後の日時を持つ。再利用した記録は前回の日時のまま。
+                // そのうち、画像を読むところまで進んだものだけを数える（端末に無い写真は一瞬で終わる）
+                if record.scannedAt >= progress.startedAt, progressPolicy.takesTime(record.outcome) {
+                    progress.diagnosedNow += 1
+                }
                 show(record, progress: progress)
             }
 
@@ -111,7 +126,7 @@ final class FullScanState {
     /// 診断の Task の中で持ち回る途中経過
     private struct Progress {
         var report: ScanReport
-        /// 今回の診断で実際に処理した枚数（記録の再利用を除く）。残り時間の見積もりに使う
+        /// 今回の診断で実際に診断した枚数（記録の再利用と、端末に無い写真を除く）。残り時間の見積もりに使う
         var diagnosedNow = 0
         let startedAt = Date.now
         let clockStart = ContinuousClock.now
@@ -130,7 +145,8 @@ final class FullScanState {
         elapsedSeconds = progress.elapsedSeconds
         remainingSeconds = progressPolicy.remainingSeconds(
             diagnosedNow: progress.diagnosedNow,
-            remaining: total - progress.report.total,
+            // 見込みが外れても（端末から消えた・新しく来た）、まだ結果の出ていない枚数は超えない
+            remaining: min(expectedToDiagnose - progress.diagnosedNow, total - progress.report.total),
             elapsedSeconds: elapsedSeconds
         )
         phase = .scanning(progress.report)
@@ -139,6 +155,8 @@ final class FullScanState {
     private func settle(_ progress: Progress) {
         elapsedSeconds = progress.elapsedSeconds
         remainingSeconds = nil
+        // 中断して再開するときのために、診断し終えたぶんを見込みから引いておく
+        expectedToDiagnose = max(0, expectedToDiagnose - progress.diagnosedNow)
         // 全件分の記録が流れていなければ途中で止まっている。止まった理由はここでは分からなくてよく、
         // 「残りがある」ことだけを伝える（完了として途中の数字を見せない）
         phase = progress.report.total < total ? .interrupted(progress.report) : .finished(progress.report)

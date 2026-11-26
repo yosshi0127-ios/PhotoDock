@@ -105,6 +105,24 @@ struct ScanRecordPolicyTests {
         #expect(!sut.isOutdated(record: unfetched, asset: asset(), quality: .quick, generation: generation))
     }
 
+    /// 判定ルールを変えた直後だけ、iCloud の 2,000枚が「新しい写真」に戻っていた
+    @Test("取れなかった記録は、世代・品質・編集日時が変わっても、まだ診断していない写真に数えない", arguments: [
+        ScanRecord.Outcome.notAvailableLocally,
+        ScanRecord.Outcome.unavailableInCloud,
+        ScanRecord.Outcome.missing,
+        ScanRecord.Outcome.failed
+    ])
+    func unfetchedIsNeverOutdated(_ outcome: ScanRecord.Outcome) {
+        let oldGeneration = record(generation: "old", outcome: outcome)
+        let lowQuality = record(quality: .quick, outcome: outcome)
+
+        #expect(!sut.isOutdated(record: oldGeneration, asset: asset(), quality: .quick, generation: generation))
+        #expect(!sut.isOutdated(record: lowQuality, asset: asset(), quality: .precise, generation: generation))
+        #expect(!sut.isOutdated(record: record(outcome: outcome), asset: asset(modificationDate: edited), quality: .quick, generation: generation))
+        // 診断し直すことは変わらない
+        #expect(sut.needsRescan(record: oldGeneration, asset: asset(), quality: .quick, generation: generation))
+    }
+
     // MARK: - 世代（OS の版 + 判定ルールの版）
 
     @Test("世代は OS の版と判定ルールの版の両方を含む")

@@ -109,9 +109,9 @@ struct ReportHomeView: View {
 
     // MARK: - 診断のボタン
 
-    /// 次の診断で実際に見る枚数。新しい写真に、取り寄せを許可していれば iCloud のぶんを足す
+    /// 次の診断で実際に見る枚数
     private var pendingCount: Int {
-        content.newPhotoCount + (allowsCloudDownload ? report.notAvailableLocally : 0)
+        content.pendingCount(allowsDownload: allowsCloudDownload)
     }
 
     private var footer: some View {
