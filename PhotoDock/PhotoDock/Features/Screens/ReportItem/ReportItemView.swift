@@ -81,9 +81,6 @@ struct ReportItemView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("診断結果票")
-                .font(.label)
-                .foregroundStyle(Color.inkSecondary)
             Text(kind.label)
                 .font(.screenTitle)
             if let item {
@@ -91,21 +88,20 @@ struct ReportItemView: View {
                     .font(.sectionTitle)
                     .foregroundStyle(item.verdict.tint)
             }
-            Text(kind.itemNote)
-                .font(.note)
-                .foregroundStyle(Color.inkSecondary)
-                .padding(.top, Spacing.xxs)
+            if let note = kind.itemNote {
+                Text(note)
+                    .font(.note)
+                    .foregroundStyle(Color.inkSecondary)
+            }
         }
     }
 
     /// 非表示・削除した写真は、アプリからはもう読めない。枚数と、確かめられる場所だけを出す
     private var removedNote: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("非表示・削除した写真 \(removedCount.formatted()) 枚")
+            Text("非表示・削除 \(removedCount.formatted()) 枚")
                 .font(.sectionTitle)
-            Text("写真アプリの「非表示」と「最近削除した項目」で確認できます。")
-                .font(.note)
-                .foregroundStyle(Color.inkSecondary)
+                .monospacedDigit()
         }
         .padding(Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -119,7 +115,7 @@ struct ReportItemView: View {
             // 対応済みが、非表示・削除した写真だけのとき。下の注記が中身になる
             EmptyView()
         } else if shown.isEmpty {
-            Text("この項目の写真はありません")
+            Text("写真はありません")
                 .font(.note)
                 .foregroundStyle(Color.inkSecondary)
         } else {

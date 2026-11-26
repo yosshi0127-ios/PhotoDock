@@ -17,20 +17,15 @@ struct CloudScanConfirmView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text("iCloud の写真を診断します")
-                        .font(.screenTitle)
-                    Text("端末に無い写真を、iCloud から取り寄せて診断します。")
-                        .font(.note)
-                        .foregroundStyle(Color.inkSecondary)
-                }
+                Text("iCloud の写真を診断")
+                    .font(.screenTitle)
 
                 figures
 
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    point("Wi-Fi で取り寄せます。モバイル回線では始めません。")
-                    point("取り寄せた写真は、端末にも保存されます。そのぶん空き容量を使います。")
-                    point("アプリを開いたままにしてください。閉じると止まりますが、続きから再開できます。")
+                    point("Wi-Fi のみ")
+                    // 消すと、数GB が端末に入ることを黙って始めることになる
+                    point("端末にも保存されます")
                 }
             }
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
@@ -46,11 +41,11 @@ struct CloudScanConfirmView: View {
 
     private var figures: some View {
         VStack(spacing: 0) {
-            figure("取り寄せる写真", "\(estimate.photoCount.formatted()) 枚")
+            figure("写真", "\(estimate.photoCount.formatted()) 枚")
             Divider().overlay(Color.hairline)
-            figure("通信量の目安", estimate.sizeText)
+            figure("通信量", estimate.sizeText)
             Divider().overlay(Color.hairline)
-            figure("時間の目安", estimate.durationText)
+            figure("時間", estimate.durationText)
         }
         .background(Color.surface, in: .rect(cornerRadius: Metrics.cardRadius))
         .clipShape(.rect(cornerRadius: Metrics.cardRadius))
@@ -88,12 +83,12 @@ struct CloudScanConfirmView: View {
     private var footer: some View {
         VStack(spacing: Spacing.xs) {
             if isOffWiFi {
-                Text("Wi-Fi に接続していません。接続してから、もう一度お試しください。")
+                Text("Wi-Fi に接続してください")
                     .font(.note)
                     .foregroundStyle(Color.danger)
                     .multilineTextAlignment(.center)
             }
-            ActionButton(title: "取り寄せて診断する") { onStart() }
+            ActionButton(title: "取り寄せて診断") { onStart() }
             ActionButton(title: "やめる", style: .secondary) { onCancel() }
         }
         .frame(maxWidth: Metrics.readableWidth)

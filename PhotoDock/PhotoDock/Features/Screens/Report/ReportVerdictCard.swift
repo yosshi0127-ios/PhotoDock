@@ -18,9 +18,12 @@ struct ReportVerdictCard: View {
                 Text(report.verdictHeadline)
                     .font(.verdict)
                     .foregroundStyle(report.grade.tint)
-                Text(report.verdictNote)
-                    .font(.note)
-                    .foregroundStyle(Color.inkSecondary)
+                // 補足は、見出しだけでは分からないことがあるときだけ出す
+                if let note = report.verdictNote {
+                    Text(note)
+                        .font(.note)
+                        .foregroundStyle(Color.inkSecondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

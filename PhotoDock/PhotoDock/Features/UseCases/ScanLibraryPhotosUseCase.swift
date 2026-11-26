@@ -80,7 +80,7 @@ struct ScanLibraryPhotosUseCase: Sendable {
         var session: ContinuedProcessingSession?
         if !toScan.isEmpty {
             let work = ContinuedWork(
-                title: "写真を診断しています",
+                title: "診断中",
                 subtitle: progressText(completed, of: assets.count),
                 totalUnits: assets.count
             )

@@ -52,27 +52,22 @@ extension [FindingKind] {
         let hasFace = contains { ScanReportPolicy.referenceKinds.contains($0) }
         let hasText = contains { !ScanReportPolicy.referenceKinds.contains($0) }
         let subject = switch (hasText, hasFace) {
-        case (true, true): "写真に写っている文字と顔"
-        case (false, true): "写真に写っている顔"
-        default: "写真に写っている文字"
+        case (true, true): "文字と顔"
+        case (false, true): "顔"
+        default: "文字"
         }
-        return "\(subject)は、メールでも LINE でも SNS でも、送った先にそのまま残ります。"
+        return "送ると、\(subject)はそのまま残ります"
     }
 }
 
 extension FindingKind {
 
-    /// 項目の一覧の上に出す一言。どんな写真が当てはまるかを、身近な例で言う
-    var itemNote: String {
+    /// 項目の一覧の上に出す補足。**名前で分かる項目には付けない**。
+    /// 顔だけは、文字と違って推定であることを言う（言わないと、44枚が全部「写り込み」と読める）
+    var itemNote: String? {
         switch self {
-        case .cardNumber: "カードそのものの写真や、番号を写したメモなどです。"
-        case .identityDocumentNumber: "パスポートなど、身分証の番号が読める写真です。"
-        case .credential: "Wi-Fi のメモやログイン画面など、パスワードや認証コードが読める写真です。"
-        case .phoneNumber: "名刺や書類、連絡先の画面などです。"
-        case .email: "名刺やメールの画面などです。"
-        case .postalCode: "宛名ラベルや書類などです。住所と一緒に写っていることが多い項目です。"
-        case .address: "宛名ラベルや名刺、書類などです。"
-        case .bystanderFace: "小さく写った顔や、端にある顔、横を向いた顔です。写り込みかどうかは形だけで推定しているので、参考として出しています。"
+        case .bystanderFace: "形からの推定です"
+        case .cardNumber, .identityDocumentNumber, .credential, .phoneNumber, .email, .postalCode, .address: nil
         }
     }
 

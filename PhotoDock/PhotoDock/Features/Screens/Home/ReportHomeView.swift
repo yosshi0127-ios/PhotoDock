@@ -37,18 +37,16 @@ struct ReportHomeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("写真ドック")
-                .font(.label)
-                .foregroundStyle(Color.inkSecondary)
             Text("診断結果票")
                 .font(.screenTitle)
             Group {
                 if let date = report.lastScannedAt {
-                    Text("\(date.reportDayText) 診断 ・ \(coverageText)")
+                    Text("\(date.reportShortDayText) ・ \(coverageText)")
                 } else {
                     Text(coverageText)
                 }
             }
+            .monospacedDigit()
             .font(.note)
             .foregroundStyle(Color.inkSecondary)
         }
@@ -58,8 +56,8 @@ struct ReportHomeView: View {
     /// （「総合判定 B」が、ライブラリの3割だけの結果だと分かるように）
     private var coverageText: String {
         report.undiagnosed > 0
-            ? "\(report.total.formatted()) 枚のうち \(report.diagnosed.formatted()) 枚を診断"
-            : "診断した写真 \(report.diagnosed.formatted()) 枚"
+            ? "\(report.diagnosed.formatted()) / \(report.total.formatted()) 枚"
+            : "\(report.diagnosed.formatted()) 枚"
     }
 
     // MARK: - 診断できていない写真
@@ -70,19 +68,17 @@ struct ReportHomeView: View {
         if report.undiagnosed > 0 {
             VStack(alignment: .leading, spacing: Spacing.s) {
                 if report.notAvailableLocally > 0 {
-                    note("未診断 \(report.notAvailableLocally.formatted()) 枚", "iCloud にあり、端末にありません")
-                    ActionButton(
-                        title: "iCloud の \(report.notAvailableLocally.formatted()) 枚も診断する", style: .secondary
-                    ) { onCloudScan() }
+                    note("iCloud に \(report.notAvailableLocally.formatted()) 枚")
+                    ActionButton(title: "iCloud も診断", style: .secondary) { onCloudScan() }
                 }
                 if report.failed > 0 {
-                    note("診断できなかった \(report.failed.formatted()) 枚", "文字を読み取れませんでした。次の診断でもう一度確認します")
+                    note("読み取れなかった \(report.failed.formatted()) 枚")
                 }
                 if report.unavailableInCloud > 0 {
-                    note("iCloud から取り出せない \(report.unavailableInCloud.formatted()) 枚", "iCloud 上にデータが見つからない写真です")
+                    note("iCloud から取り出せない \(report.unavailableInCloud.formatted()) 枚")
                 }
                 if report.missing > 0 {
-                    note("見つからなかった \(report.missing.formatted()) 枚", "読み込めない写真です")
+                    note("見つからなかった \(report.missing.formatted()) 枚")
                 }
             }
             .padding(Spacing.m)
@@ -91,19 +87,16 @@ struct ReportHomeView: View {
         }
     }
 
-    private func note(_ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(title).font(.sectionTitle)
-            Text(detail)
-                .font(.note)
-                .foregroundStyle(Color.inkSecondary)
-        }
-        .accessibilityElement(children: .combine)
+    /// まだ診断できていない写真の、種類と枚数。理由の説明は付けない（枚数が分かれば足りる）
+    private func note(_ title: String) -> some View {
+        Text(title)
+            .font(.sectionTitle)
+            .monospacedDigit()
     }
 
     /// 全量を見られていないことは伝える（見えていない分を「無かった」と誤解させない）
     private var limitedNotice: some View {
-        Text("選択された写真だけを診断しています。すべてを診断するには、写真へのフルアクセスを許可してください。")
+        Text("選択した写真だけを診断しています")
             .font(.note)
             .foregroundStyle(Color.inkSecondary)
     }
@@ -118,7 +111,7 @@ struct ReportHomeView: View {
 
     private var footer: some View {
         ActionButton(
-            title: pendingCount > 0 ? "\(pendingCount.formatted()) 枚を診断する" : "もう一度診断する",
+            title: pendingCount > 0 ? "\(pendingCount.formatted()) 枚を診断" : "もう一度診断",
             style: pendingCount > 0 ? .primary : .secondary
         ) { onScan() }
         .frame(maxWidth: Metrics.readableWidth)

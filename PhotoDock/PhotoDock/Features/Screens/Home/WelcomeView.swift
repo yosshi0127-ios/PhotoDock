@@ -24,12 +24,9 @@ struct WelcomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("写真ドック")
-                        .font(.label)
-                        .foregroundStyle(Color.inkSecondary)
-                    Text("カメラロールの\n検診をはじめます")
+                    Text("カメラロール検診")
                         .font(.screenTitle)
-                    Text("カード番号や住所など、人に見られると困るものが写った写真を探して、結果票にまとめます。")
+                    Text("見られて困る写真を探します")
                         .font(.rowLabel)
                         .foregroundStyle(Color.inkSecondary)
                 }
@@ -48,11 +45,11 @@ struct WelcomeView: View {
 
     private var promises: some View {
         VStack(spacing: 0) {
-            promise("端末の中だけで診断します", "写真を外に送ることはありません。")
+            promise("端末の中だけ")
             Divider().overlay(Color.hairline)
-            promise("写真は書き換えません", "診断で写真が変わることはありません。")
+            promise("写真は書き換えない")
             Divider().overlay(Color.hairline)
-            promise("読み取った文字は残しません", "記録するのは、種類と場所だけです。")
+            promise("読んだ文字は残さない")
         }
         .background(Color.surface, in: .rect(cornerRadius: Metrics.cardRadius))
         .overlay {
@@ -61,22 +58,18 @@ struct WelcomeView: View {
         }
     }
 
-    private func promise(_ title: String, _ detail: String) -> some View {
-        HStack(alignment: .top, spacing: Spacing.s) {
+    /// 説明の文は付けない。約束は、短いほど読まれる
+    private func promise(_ title: String) -> some View {
+        HStack(spacing: Spacing.s) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.title3)
                 .foregroundStyle(Color.themeAccent)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text(title).font(.sectionTitle)
-                Text(detail)
-                    .font(.note)
-                    .foregroundStyle(Color.inkSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(title)
+                .font(.sectionTitle)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(Spacing.m)
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -85,15 +78,12 @@ struct WelcomeView: View {
             switch mode {
             case .needsPermission:
                 ActionButton(title: "診断をはじめる") { onStart() }
-                Text("次に、写真へのアクセスを確認します。")
-                    .font(.note)
-                    .foregroundStyle(Color.inkSecondary)
             case .firstScan(photoCount: 0):
-                Text("診断できる写真がありません")
+                Text("写真がありません")
                     .font(.sectionTitle)
                     .foregroundStyle(Color.inkSecondary)
             case let .firstScan(photoCount: count):
-                ActionButton(title: "\(count.formatted()) 枚を診断する") { onStart() }
+                ActionButton(title: "\(count.formatted()) 枚を診断") { onStart() }
             }
         }
         .frame(maxWidth: Metrics.readableWidth)
