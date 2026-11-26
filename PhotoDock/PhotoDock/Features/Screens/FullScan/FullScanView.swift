@@ -38,7 +38,12 @@ struct FullScanView: View {
         )
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedKind) { kind in
-            ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind)) {
+            ReportItemView(
+                kind: kind,
+                item: state.item(of: kind),
+                photos: state.photos(of: kind),
+                removed: state.removedPhotos(of: kind)
+            ) {
                 await state.reloadDispositions()
             }
         }

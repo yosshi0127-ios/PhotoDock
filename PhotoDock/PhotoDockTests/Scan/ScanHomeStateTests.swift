@@ -298,4 +298,23 @@ struct ScanHomeStateTests {
         #expect(!state.scanAllowsDownload)
         #expect(state.expectedToDiagnose == 0)
     }
+
+    @Test("非表示・削除した写真は、項目の対応済みの側に行として出る")
+    func removedPhotosAreListed() async {
+        let library = SpyPhotoLibraryService(access: .full, assets: [.stub(id: "open")])
+        let records = SpyScanRecordRepository(records: [record("open", [.address])])
+        let dispositions = SpyPhotoDispositionRepository(dispositions: [
+            PhotoDisposition(
+                assetID: "gone", action: .deleted, decidedAt: Date(timeIntervalSince1970: 1_750_000_000),
+                modificationDate: nil, kinds: [.address]
+            )
+        ])
+        let state = makeState(library: library, records: records, dispositions: dispositions)
+
+        await state.load()
+
+        #expect(state.removedPhotos(of: .address).map(\.assetID) == ["gone"])
+        #expect(state.removedPhotos(of: .phoneNumber).isEmpty)
+        #expect(state.item(of: .address)?.handledCount == 1)
+    }
 }

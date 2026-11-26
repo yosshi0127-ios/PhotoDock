@@ -183,4 +183,66 @@ struct ScanReportDispositionTests {
 
         #expect(sut.report(from: records, presentAssetIDs: ["a", "b", "c"]) == sut.report(from: records))
     }
+
+    // MARK: - 非表示・削除した写真の一覧
+
+    private func removed(
+        _ id: String, _ action: PhotoDisposition.Action, kinds: [FindingKind], decidedDaysLater: Double = 0, takenAt: Date? = nil
+    ) -> PhotoDisposition {
+        PhotoDisposition(
+            assetID: id, action: action, decidedAt: day.addingTimeInterval(decidedDaysLater * 86_400),
+            modificationDate: nil, kinds: kinds, takenAt: takenAt
+        )
+    }
+
+    /// 写真はもう読めない。対処の記録に残したことだけで、1枚ずつ行にする
+    @Test("非表示・削除した写真を、その種類が写っていたものだけ、対処した日の新しい順に返す")
+    func removedPhotosOfKind() {
+        let taken = day.addingTimeInterval(-86_400 * 30)
+        let dispositions = [
+            removed("old", .hidden, kinds: [.postalCode, .address], decidedDaysLater: 1, takenAt: taken),
+            removed("new", .deleted, kinds: [.address], decidedDaysLater: 2),
+            removed("other", .deleted, kinds: [.cardNumber], decidedDaysLater: 3)
+        ]
+
+        let photos = sut.removedPhotos(of: .address, dispositions: dispositions, presentAssetIDs: [])
+
+        #expect(photos.map(\.assetID) == ["new", "old"])
+        #expect(photos.map(\.action) == [.deleted, .hidden])
+        // 写っていた種類は、表と同じ順
+        #expect(photos.last?.kinds == [.address, .postalCode])
+        #expect(photos.last?.takenAt == taken)
+        // この項目を足す前に対処した写真は、撮った日が無い
+        #expect(photos.first?.takenAt == nil)
+    }
+
+    @Test("問題なしにした写真と、ライブラリに戻ってきた写真は、非表示・削除の一覧に出さない")
+    func removedPhotosExcludesDismissedAndRestored() {
+        let dispositions = [
+            removed("dismissed", .dismissed, kinds: [.address]),
+            removed("restored", .hidden, kinds: [.address]),
+            removed("gone", .hidden, kinds: [.address])
+        ]
+
+        let photos = sut.removedPhotos(of: .address, dispositions: dispositions, presentAssetIDs: ["dismissed", "restored"])
+
+        #expect(photos.map(\.assetID) == ["gone"])
+    }
+
+    /// 一覧の枚数と、結果票の「対応済み」の数字がずれないこと
+    @Test("非表示・削除の一覧と、問題なしの写真を足すと、結果票の対応済みの枚数になる")
+    func removedCountMatchesReport() {
+        let records = [record("open", [finding(.address)]), record("dismissed", [finding(.address)])]
+        let dispositions = [
+            disposition("dismissed", .dismissed),
+            removed("hidden", .hidden, kinds: [.address]),
+            removed("deleted", .deleted, kinds: [.address, .phoneNumber])
+        ]
+        let present: Set<String> = ["open", "dismissed"]
+
+        let report = sut.report(from: records, presentAssetIDs: present, dispositions: dispositions)
+        let removedPhotos = sut.removedPhotos(of: .address, dispositions: dispositions, presentAssetIDs: present)
+
+        #expect(item(.address, in: report)?.handledCount == 1 + removedPhotos.count)
+    }
 }

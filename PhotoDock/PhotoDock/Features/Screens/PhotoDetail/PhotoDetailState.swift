@@ -3,6 +3,7 @@
 //  PhotoDock
 //
 
+import Foundation
 import Observation
 import UIKit
 
@@ -59,9 +60,9 @@ final class PhotoDetailState {
 
     /// 「問題なしにする」。写真ライブラリには触らず、アプリの中の印を付けるだけ。
     /// 保存できたときだけ表示を変える（できていないのに「対応済み」と見せない）
-    func dismiss(record: ScanRecord) async {
+    func dismiss(record: ScanRecord, takenAt: Date? = nil) async {
         do {
-            try await dismissPhoto(record: record)
+            try await dismissPhoto(record: record, takenAt: takenAt)
             isDismissed = true
             didFailToSave = false
         } catch {
@@ -82,12 +83,12 @@ final class PhotoDetailState {
 
     /// 「非表示アルバムへ移す」「削除する」。確認は iOS が出す。
     /// 「許可しない」が選ばれたら何も変えない（失敗の文言も出さない）
-    func remove(_ method: RemovePhotoUseCase.Method, record: ScanRecord) async {
+    func remove(_ method: RemovePhotoUseCase.Method, record: ScanRecord, takenAt: Date? = nil) async {
         guard !isWorking, removal == nil else { return }
         isWorking = true
         defer { isWorking = false }
 
-        switch await removePhoto(method, record: record) {
+        switch await removePhoto(method, record: record, takenAt: takenAt) {
         case .done:
             removal = method
             didFailToRemove = false

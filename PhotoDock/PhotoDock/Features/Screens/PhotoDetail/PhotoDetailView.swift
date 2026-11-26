@@ -15,6 +15,7 @@ struct PhotoDetailView: View {
     @State private var state = PhotoDetailState()
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ScrollView {
@@ -85,6 +86,8 @@ struct PhotoDetailView: View {
             footnote("削除しました（30日は復元できます）", color: .inkSecondary)
         }
         ActionButton(title: "戻る") { close() }
+        // 特定の写真や「非表示」アルバムを直接開く方法は無い。写真アプリを開くところまで
+        ActionButton(title: "写真アプリを開く", style: .secondary) { openPhotosApp() }
     }
 
     private func footnote(_ text: String, color: Color) -> some View {
@@ -98,7 +101,7 @@ struct PhotoDetailView: View {
 
     private func remove(_ method: RemovePhotoUseCase.Method) {
         Task {
-            await state.remove(method, record: photo.record)
+            await state.remove(method, record: photo.record, takenAt: photo.takenAt)
             await onDispositionChange()
         }
     }
@@ -107,9 +110,13 @@ struct PhotoDetailView: View {
         dismiss()
     }
 
+    private func openPhotosApp() {
+        openURL(.photosApp)
+    }
+
     private func dismissFindings() {
         Task {
-            await state.dismiss(record: photo.record)
+            await state.dismiss(record: photo.record, takenAt: photo.takenAt)
             await onDispositionChange()
         }
     }

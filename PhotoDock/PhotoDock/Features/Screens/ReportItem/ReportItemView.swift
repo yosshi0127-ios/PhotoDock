@@ -13,6 +13,8 @@ struct ReportItemView: View {
     let item: ScanReport.Item?
     /// 並び順は Policy が決めてある（危険が先、その中で新しい写真が先）
     let photos: [ReportItemPhoto]
+    /// 非表示・削除した写真。対応済みの側に、写真の行の下に並べる（もう読めないので、押せない行）
+    var removed: [ReportRemovedPhoto] = []
     /// 写真詳細で対応を付け外ししたあとに呼ぶ（開いた元が、結果票と一覧を作り直す）
     var onDispositionChange: () async -> Void = {}
 
@@ -24,14 +26,13 @@ struct ReportItemView: View {
     /// 写真詳細から戻ったあと、この画面の戻るボタンが効かなくなった（実機で発生。brief「段階3で決めたこと」）
     @State private var openedPhoto: ReportItemPhoto?
 
+    @Environment(\.openURL) private var openURL
+
     private var openPhotos: [ReportItemPhoto] { photos.filter { !$0.isHandled } }
     private var handledPhotos: [ReportItemPhoto] { photos.filter(\.isHandled) }
 
-    /// 対応済みの枚数。非表示・削除した写真はもう一覧に出せないので、結果票の行の数字から取る
-    private var handledCount: Int { max(item?.handledCount ?? 0, handledPhotos.count) }
-
-    /// 非表示・削除して、アプリから見えなくなった写真の枚数
-    private var removedCount: Int { handledCount - handledPhotos.count }
+    /// 対応済みの枚数（問題なしにした写真 + 非表示・削除した写真）
+    private var handledCount: Int { handledPhotos.count + removed.count }
 
     /// 切り替えを出すのは、未対応と対応済みの両方があるときだけ（片方しか無ければ、選ぶものが無い）
     private var showsPicker: Bool { handledCount > 0 && !openPhotos.isEmpty }
@@ -58,8 +59,8 @@ struct ReportItemView: View {
                     .pickerStyle(.segmented)
                 }
                 list
-                if isShowingHandled, removedCount > 0 {
-                    removedNote
+                if isShowingHandled, !removed.isEmpty {
+                    removedList
                 }
             }
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
@@ -79,6 +80,10 @@ struct ReportItemView: View {
         openedPhoto = photo
     }
 
+    private func openPhotosApp() {
+        openURL(.photosApp)
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(kind.label)
@@ -96,17 +101,27 @@ struct ReportItemView: View {
         }
     }
 
-    /// 非表示・削除した写真は、アプリからはもう読めない。枚数と、確かめられる場所だけを出す
-    private var removedNote: some View {
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text("非表示・削除 \(removedCount.formatted()) 枚")
-                .font(.sectionTitle)
-                .monospacedDigit()
+    /// 非表示・削除した写真。アプリからはもう読めないので、押せない行で出す。
+    /// 見に行く先は写真アプリなので、開くボタンを下に置く
+    private var removedList: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            VStack(spacing: 0) {
+                ForEach(removed) { photo in
+                    if photo.id != removed.first?.id {
+                        Divider().overlay(Color.hairline)
+                    }
+                    ReportRemovedPhotoRow(photo: photo, openedKind: kind)
+                }
+            }
+            .background(Color.surface, in: .rect(cornerRadius: Metrics.cardRadius))
+            .clipShape(.rect(cornerRadius: Metrics.cardRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                    .stroke(Color.hairline, lineWidth: Metrics.hairlineWidth)
+            }
+
+            ActionButton(title: "写真アプリを開く", style: .secondary) { openPhotosApp() }
         }
-        .padding(Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.cardRadius))
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

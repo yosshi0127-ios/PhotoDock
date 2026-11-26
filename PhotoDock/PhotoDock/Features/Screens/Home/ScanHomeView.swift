@@ -25,7 +25,12 @@ struct ScanHomeView: View {
                 )
             }
             .navigationDestination(item: $selectedKind) { kind in
-                ReportItemView(kind: kind, item: state.item(of: kind), photos: state.photos(of: kind)) {
+                ReportItemView(
+                    kind: kind,
+                    item: state.item(of: kind),
+                    photos: state.photos(of: kind),
+                    removed: state.removedPhotos(of: kind)
+                ) {
                     // 写真詳細で対応を付け外ししたら、結果票と一覧を読み直す
                     await state.load()
                 }

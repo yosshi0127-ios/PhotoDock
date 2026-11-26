@@ -228,10 +228,12 @@ struct ScanReportItemPhotosTests {
             outcome: .scanned([finding(.postalCode), finding(.address), finding(.address)])
         )
 
-        let disposition = sut.disposition(.dismissed, for: photo, decidedAt: day)
+        let taken = day.addingTimeInterval(-86_400)
+        let disposition = sut.disposition(.dismissed, for: photo, takenAt: taken, decidedAt: day)
 
         #expect(disposition == PhotoDisposition(
-            assetID: "a", action: .dismissed, decidedAt: day, modificationDate: edited, kinds: [.address, .postalCode]
+            assetID: "a", action: .dismissed, decidedAt: day, modificationDate: edited,
+            kinds: [.address, .postalCode], takenAt: taken
         ))
         // 自分で組み立てた対応は、その記録に対して効いている
         #expect(sut.isActive(disposition, modificationDate: photo.modificationDate, isPresent: true))

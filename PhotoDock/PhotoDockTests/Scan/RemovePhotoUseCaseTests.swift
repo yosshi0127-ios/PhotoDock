@@ -12,6 +12,7 @@ import Testing
 @Suite("RemovePhotoUseCase")
 struct RemovePhotoUseCaseTests {
     private let edited = Date(timeIntervalSince1970: 1_760_000_000)
+    private let taken = Date(timeIntervalSince1970: 1_740_000_000)
 
     private var record: ScanRecord {
         ScanRecord(
@@ -35,7 +36,7 @@ struct RemovePhotoUseCaseTests {
         } operation: {
             // @Dependency は生成時点の context を捕捉するので、必ずこの中で作る
             let useCase = RemovePhotoUseCase()
-            return await useCase(method, record: record)
+            return await useCase(method, record: record, takenAt: taken)
         }
     }
 
@@ -53,6 +54,8 @@ struct RemovePhotoUseCaseTests {
         #expect(saved.map(\.action) == [.hidden])
         // 非表示にした写真はもう読めないので、種類は対応の側に残す（表の順）
         #expect(saved.first?.kinds == [.cardNumber, .phoneNumber])
+        // 撮った日も控える（あとで一覧に出すとき、ほかに知る手段が無い）
+        #expect(saved.first?.takenAt == taken)
     }
 
     @Test("削除できたら、削除として保存する")

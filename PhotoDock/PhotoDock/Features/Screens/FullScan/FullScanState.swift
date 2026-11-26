@@ -68,6 +68,13 @@ final class FullScanState {
         reportPolicy.photos(of: kind, in: flagged, assets: presentAssets, dispositions: dispositions)
     }
 
+    /// その項目で、非表示・削除した写真（対応済みの側に並べる）
+    func removedPhotos(of kind: FindingKind) -> [ReportRemovedPhoto] {
+        reportPolicy.removedPhotos(
+            of: kind, dispositions: dispositions, presentAssetIDs: Set(presentAssets.map(\.id))
+        )
+    }
+
     /// ここまでの結果票の、その項目の行（判定と枚数）
     func item(of kind: FindingKind) -> ScanReport.Item? {
         report.items.first { $0.kind == kind }
