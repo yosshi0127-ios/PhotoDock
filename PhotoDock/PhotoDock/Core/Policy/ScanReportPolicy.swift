@@ -92,8 +92,7 @@ struct ScanReportPolicy: Sendable {
 
     /// 項目の判定は上がるだけ（1枚でも危険があれば、その項目は危険）
     private func verdict(for kind: FindingKind, severity: Severity, current: ScanReport.Verdict) -> ScanReport.Verdict {
-        if Self.referenceKinds.contains(kind) { return .reference }
-        if current == .danger || severity == .danger { return .danger }
-        return .caution
+        if current == .danger { return .danger }
+        return verdict(for: kind, severity: severity)
     }
 }
