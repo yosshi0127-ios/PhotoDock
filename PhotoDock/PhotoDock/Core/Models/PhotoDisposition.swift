@@ -30,6 +30,10 @@ struct PhotoDisposition: Sendable, Equatable, Codable, Identifiable {
     /// 対応を決めたときに写っていた種類。
     /// 非表示・削除した写真はもう読めず、記録も消されうるので、どの項目の「対応済み」に数えるかをここで持つ
     let kinds: [FindingKind]
+    /// 写真を撮った日。非表示・削除した写真を、あとで一覧に出すために控える
+    /// （写真はもう読めないので、ここに無ければ分からない）。
+    /// 既定値を持つのは、この項目を後から足したため（memberwise init の既存呼び出しを壊さない）
+    var takenAt: Date?
 
     var id: String { assetID }
 }

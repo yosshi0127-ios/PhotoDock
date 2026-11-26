@@ -16,13 +16,18 @@ final class PhotoDispositionEntity {
     var modificationDate: Date?
     /// FindingKind.rawValue の並び。配列をそのまま属性にすると保存形式が不透明になるので、文字列で持つ
     var kinds: [String]
+    /// 後から足した項目。省略できる属性なので、前の版で保存した行もそのまま読める（nil になる）
+    var takenAt: Date?
 
-    init(assetID: String, action: String, decidedAt: Date, modificationDate: Date?, kinds: [String]) {
+    init(
+        assetID: String, action: String, decidedAt: Date, modificationDate: Date?, kinds: [String], takenAt: Date? = nil
+    ) {
         self.assetID = assetID
         self.action = action
         self.decidedAt = decidedAt
         self.modificationDate = modificationDate
         self.kinds = kinds
+        self.takenAt = takenAt
     }
 }
 
@@ -33,7 +38,8 @@ extension PhotoDispositionEntity {
             action: disposition.action.rawValue,
             decidedAt: disposition.decidedAt,
             modificationDate: disposition.modificationDate,
-            kinds: disposition.kinds.map(\.rawValue)
+            kinds: disposition.kinds.map(\.rawValue),
+            takenAt: disposition.takenAt
         )
     }
 
@@ -43,6 +49,7 @@ extension PhotoDispositionEntity {
         decidedAt = disposition.decidedAt
         modificationDate = disposition.modificationDate
         kinds = disposition.kinds.map(\.rawValue)
+        takenAt = disposition.takenAt
     }
 
     /// 復元できない行（知らない対応の名前）は nil。知らない種類は、その種類だけを落とす
@@ -54,7 +61,8 @@ extension PhotoDispositionEntity {
             action: action,
             decidedAt: decidedAt,
             modificationDate: modificationDate,
-            kinds: kinds.compactMap(FindingKind.init(rawValue:))
+            kinds: kinds.compactMap(FindingKind.init(rawValue:)),
+            takenAt: takenAt
         )
     }
 }

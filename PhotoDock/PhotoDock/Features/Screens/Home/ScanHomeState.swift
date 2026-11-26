@@ -53,6 +53,14 @@ final class ScanHomeState {
         )
     }
 
+    /// その項目で、非表示・削除した写真（対応済みの側に並べる）
+    func removedPhotos(of kind: FindingKind) -> [ReportRemovedPhoto] {
+        guard case let .loaded(.ready(content)) = phase else { return [] }
+        return reportPolicy.removedPhotos(
+            of: kind, dispositions: content.dispositions, presentAssetIDs: Set(content.assets.map(\.id))
+        )
+    }
+
     /// 結果票の、その項目の行（判定と枚数）
     func item(of kind: FindingKind) -> ScanReport.Item? {
         guard case let .loaded(.ready(content)) = phase else { return nil }

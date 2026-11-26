@@ -13,9 +13,9 @@ struct DismissPhotoUseCase: Sendable {
 
     private let reportPolicy = ScanReportPolicy()
 
-    func callAsFunction(record: ScanRecord) async throws {
+    func callAsFunction(record: ScanRecord, takenAt: Date? = nil) async throws {
         try await photoDispositions.save(
-            reportPolicy.disposition(.dismissed, for: record, decidedAt: .now)
+            reportPolicy.disposition(.dismissed, for: record, takenAt: takenAt, decidedAt: .now)
         )
     }
 }

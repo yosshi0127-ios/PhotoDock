@@ -23,7 +23,8 @@ struct RemovePhotoUseCase: Sendable {
 
     private let reportPolicy = ScanReportPolicy()
 
-    func callAsFunction(_ method: Method, record: ScanRecord) async -> PhotoActionOutcome {
+    /// takenAt は写真を撮った日。あとで対応済みの一覧に出すために控える（実行したあとは、もう読めない）
+    func callAsFunction(_ method: Method, record: ScanRecord, takenAt: Date? = nil) async -> PhotoActionOutcome {
         let outcome = switch method {
         case .hide: await photoActions.hide(assetID: record.assetID)
         case .delete: await photoActions.delete(assetID: record.assetID)
@@ -31,7 +32,7 @@ struct RemovePhotoUseCase: Sendable {
         guard outcome == .done else { return outcome }
 
         let action: PhotoDisposition.Action = method == .hide ? .hidden : .deleted
-        try? await photoDispositions.save(reportPolicy.disposition(action, for: record, decidedAt: .now))
+        try? await photoDispositions.save(reportPolicy.disposition(action, for: record, takenAt: takenAt, decidedAt: .now))
         return .done
     }
 }

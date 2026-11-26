@@ -23,7 +23,10 @@ struct SwiftDataPhotoDispositionRepositoryTests {
     }
 
     private func disposition(_ id: String, _ action: PhotoDisposition.Action, kinds: [FindingKind] = [.address]) -> PhotoDisposition {
-        PhotoDisposition(assetID: id, action: action, decidedAt: day, modificationDate: day, kinds: kinds)
+        PhotoDisposition(
+            assetID: id, action: action, decidedAt: day, modificationDate: day, kinds: kinds,
+            takenAt: day.addingTimeInterval(-86_400)
+        )
     }
 
     @Test("保存した対応が、そのまま読める")
@@ -78,5 +81,17 @@ struct SwiftDataPhotoDispositionRepositoryTests {
 
         #expect(unknownAction.toDisposition() == nil)
         #expect(unknownKind.toDisposition()?.kinds == [.address])
+    }
+
+    /// 撮った日は後から足した項目。前の版で保存した行（撮った日なし）も読めること
+    @Test("撮った日の無い行も読める")
+    func readsRowWithoutTakenAt() {
+        let legacy = PhotoDispositionEntity(
+            assetID: "a", action: "deleted", decidedAt: day, modificationDate: nil, kinds: ["cardNumber"]
+        )
+
+        #expect(legacy.toDisposition() == PhotoDisposition(
+            assetID: "a", action: .deleted, decidedAt: day, modificationDate: nil, kinds: [.cardNumber]
+        ))
     }
 }

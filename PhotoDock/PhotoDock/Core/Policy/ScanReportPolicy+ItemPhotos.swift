@@ -44,15 +44,50 @@ extension ScanReportPolicy {
     }
 
     /// その写真に付ける対応を組み立てる。写っていた種類は、表と同じ順で残す
-    func disposition(_ action: PhotoDisposition.Action, for record: ScanRecord, decidedAt: Date) -> PhotoDisposition {
+    func disposition(
+        _ action: PhotoDisposition.Action,
+        for record: ScanRecord,
+        takenAt: Date? = nil,
+        decidedAt: Date
+    ) -> PhotoDisposition {
         let present = Set(record.findings.map(\.kind))
         return PhotoDisposition(
             assetID: record.assetID,
             action: action,
             decidedAt: decidedAt,
             modificationDate: record.modificationDate,
-            kinds: Self.itemOrder.filter(present.contains)
+            kinds: Self.itemOrder.filter(present.contains),
+            takenAt: takenAt
         )
+    }
+
+    /// 結果票の項目を開いたときに、対応済みの側に並べる「非表示・削除した写真」。
+    ///
+    /// - その種類が写っていて、いまライブラリから見えない写真だけ（写真アプリで戻した写真は、未対応に戻る）
+    /// - **対処した日の新しい順**（いま対処したものが上に来る）。同じ日時なら ID の順
+    func removedPhotos(
+        of kind: FindingKind,
+        dispositions: [PhotoDisposition],
+        presentAssetIDs: Set<String>
+    ) -> [ReportRemovedPhoto] {
+        dispositions
+            .filter { disposition in
+                disposition.action != .dismissed
+                    && disposition.kinds.contains(kind)
+                    && isActive(disposition, modificationDate: nil, isPresent: presentAssetIDs.contains(disposition.assetID))
+            }
+            .map { disposition in
+                ReportRemovedPhoto(
+                    assetID: disposition.assetID,
+                    action: disposition.action,
+                    takenAt: disposition.takenAt,
+                    decidedAt: disposition.decidedAt,
+                    kinds: Self.itemOrder.filter(disposition.kinds.contains)
+                )
+            }
+            .sorted { lhs, rhs in
+                lhs.decidedAt != rhs.decidedAt ? lhs.decidedAt > rhs.decidedAt : lhs.assetID < rhs.assetID
+            }
     }
 
     /// 写真詳細に出す所見。種類ごとに1行にまとめ、結果票の表と同じ順に並べる。
