@@ -5,7 +5,8 @@
 
 import SwiftUI
 
-/// 結果票の項目（種類）を開いた先。その種類が写っている写真を、1枚1行で並べる。
+/// 結果票の項目（種類）を開いた先。その種類が写っている写真を並べる。
+/// 枚数が少なければ1枚1行（撮った日と、ほかに写っている種類が分かる）、多ければ格子（スクロールが短い）。
 /// ホームと診断中の画面で同じものを使う（診断中は、見つかるたびに行が増える）
 struct ReportItemView: View {
     let kind: FindingKind
@@ -20,6 +21,9 @@ struct ReportItemView: View {
 
     /// 対応済みの写真を見ているか。既定は未対応（先に見るべきもの）
     @State private var showsHandled = false
+
+    /// ユーザーが選んだ並べ方。選んでいなければ nil（枚数で決める）
+    @State private var chosenLayout: Layout?
 
     /// 開いている写真。**行ではなく、この画面が持つ**。
     /// 行に遷移（NavigationLink）をぶら下げると、対応して行が一覧から消えたときに遷移の管理がずれ、
@@ -47,6 +51,16 @@ struct ReportItemView: View {
 
     private var shown: [ReportItemPhoto] { isShowingHandled ? handledPhotos : openPhotos }
 
+    /// いまの並べ方。選んでいなければ、枚数が多いときだけ格子にする。
+    /// 1行ずつだと、顔の写り込み 49枚で6画面ぶんのスクロールになった（実機）。
+    /// 少ないときは1行ずつのほうが、撮った日と、ほかに写っている種類が開く前に分かる
+    private var layout: Layout {
+        chosenLayout ?? (shown.count > Self.gridThreshold ? .grid : .rows)
+    }
+
+    private static let gridThreshold = 12
+    private static let gridColumns = Array(repeating: GridItem(.flexible(), spacing: Spacing.xxs), count: 3)
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
@@ -70,11 +84,23 @@ struct ReportItemView: View {
             // 切り替えたとき・対処して行が移ったときに、一覧をぱっと差し替えない
             .motion(Motion.quick, value: isShowingHandled)
             .motion(Motion.settle, value: shown.map(\.id))
+            .motion(Motion.settle, value: layout)
         }
         .foregroundStyle(Color.ink)
         .background(Color.ground)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // 並べ替えるものが無いとき（写真が0〜1枚）は出さない
+            if shown.count > 1 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(layout.switchLabel, systemImage: layout.switchSymbol) {
+                        chosenLayout = layout.other
+                    }
+                }
+            }
+        }
         .sensoryFeedback(.selection, trigger: showsHandled)
+        .sensoryFeedback(.selection, trigger: chosenLayout)
         .navigationDestination(item: $openedPhoto) { photo in
             PhotoDetailView(photo: photo, onDispositionChange: onDispositionChange)
         }
@@ -152,6 +178,18 @@ struct ReportItemView: View {
             Text("写真はありません")
                 .font(.note)
                 .foregroundStyle(Color.inkSecondary)
+        } else if layout == .grid {
+            // 画面に出た分だけを作る（サムネイルの読み込みも1枚ごと）
+            LazyVGrid(columns: Self.gridColumns, spacing: Spacing.xxs) {
+                ForEach(shown) { photo in
+                    Button {
+                        open(photo)
+                    } label: {
+                        ReportItemPhotoCell(photo: photo)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         } else {
             // 数十〜数百行になりうるので、画面に出た行だけを作る（サムネイルの読み込みも行ごと）
             LazyVStack(spacing: 0) {

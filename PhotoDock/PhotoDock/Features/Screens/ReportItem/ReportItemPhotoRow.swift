@@ -53,7 +53,7 @@ struct ReportItemPhotoRow: View {
         .contentShape(.rect)
         .task { await thumbnail.load(assetID: photo.id, maxPixelSize: Int(Metrics.thumbnailSize * displayScale)) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
+        .accessibilityLabel(photo.accessibilityText)
     }
 
     private var image: some View {
@@ -85,11 +85,15 @@ struct ReportItemPhotoRow: View {
             .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.tagRadius))
     }
 
-    private var accessibilityText: String {
-        let day = photo.takenAt?.reportDayText ?? "撮影日不明"
-        let kinds = photo.kinds.map(\.label).joined(separator: "、")
-        let state = photo.isHandled ? "問題なしにした写真" : photo.verdict.label
-        return "\(day)、\(state)、\(kinds)"
+}
+
+extension ReportItemPhoto {
+    /// 読み上げ用の説明。1行ずつの表示でも、格子の表示でも、同じことを伝える
+    var accessibilityText: String {
+        let day = takenAt?.reportDayText ?? "撮影日不明"
+        let kindNames = kinds.map(\.label).joined(separator: "、")
+        let state = isHandled ? "問題なしにした写真" : verdict.label
+        return "\(day)、\(state)、\(kindNames)"
     }
 }
 
