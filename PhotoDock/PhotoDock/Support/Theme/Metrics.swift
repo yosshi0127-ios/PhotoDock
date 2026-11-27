@@ -39,6 +39,8 @@ enum Metrics {
     static let gradeStrokeWidth: CGFloat = 3
     /// 一覧の行に出すサムネイルの一辺
     static let thumbnailSize: CGFloat = 64
+    /// 格子で並べる写真の一辺の目安（読み込む画像の大きさを決めるのに使う。実際の一辺は画面の幅で決まる）
+    static let gridCellSize: CGFloat = 160
     /// 写真詳細の写真を、これより低くは縮めない
     static let photoMinHeight: CGFloat = 220
     /// 本文の幅の上限。広い画面（iPhone Duo を開いたとき等）で、行の左右が離れすぎないようにする。
