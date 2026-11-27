@@ -12,11 +12,15 @@ import Photos
 /// - 「許可しない」は `PHPhotosError.userCancelled`（3072）
 /// - 非表示にした写真は、以後 `includeHiddenAssets` を指定しても取れない
 struct PhotoKitPhotoActionService: PhotoActionService {
-    func hide(assetID: String) async -> PhotoActionOutcome {
-        guard let asset = Self.asset(assetID) else { return .notFound }
+    func hide(assetIDs: [String]) async -> PhotoActionOutcome {
+        let assets = Self.assets(assetIDs)
+        guard !assets.isEmpty else { return .notFound }
         do {
+            // 1回の変更にまとめる（OS の確認が、まとめて1回になる）
             try await PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest(for: asset).isHidden = true
+                for asset in assets {
+                    PHAssetChangeRequest(for: asset).isHidden = true
+                }
             }
             return .done
         } catch {
@@ -24,11 +28,12 @@ struct PhotoKitPhotoActionService: PhotoActionService {
         }
     }
 
-    func delete(assetID: String) async -> PhotoActionOutcome {
-        guard let asset = Self.asset(assetID) else { return .notFound }
+    func delete(assetIDs: [String]) async -> PhotoActionOutcome {
+        let assets = Self.assets(assetIDs)
+        guard !assets.isEmpty else { return .notFound }
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.deleteAssets([asset] as NSArray)
+                PHAssetChangeRequest.deleteAssets(assets as NSArray)
             }
             return .done
         } catch {
@@ -36,8 +41,9 @@ struct PhotoKitPhotoActionService: PhotoActionService {
         }
     }
 
-    private static func asset(_ id: String) -> PHAsset? {
-        PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
+    private static func assets(_ ids: [String]) -> [PHAsset] {
+        let result = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+        return (0..<result.count).map { result.object(at: $0) }
     }
 
     private static func outcome(for error: any Error) -> PhotoActionOutcome {

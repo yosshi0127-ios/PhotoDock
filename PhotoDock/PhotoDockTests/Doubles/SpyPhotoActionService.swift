@@ -16,13 +16,18 @@ actor SpyPhotoActionService: PhotoActionService {
         self.outcome = outcome
     }
 
-    func hide(assetID: String) -> PhotoActionOutcome {
-        hiddenIDs.append(assetID)
+    /// 何回呼ばれたか（まとめて1回で渡していることを確かめる）
+    private(set) var callCount = 0
+
+    func hide(assetIDs: [String]) -> PhotoActionOutcome {
+        callCount += 1
+        hiddenIDs.append(contentsOf: assetIDs)
         return outcome
     }
 
-    func delete(assetID: String) -> PhotoActionOutcome {
-        deletedIDs.append(assetID)
+    func delete(assetIDs: [String]) -> PhotoActionOutcome {
+        callCount += 1
+        deletedIDs.append(contentsOf: assetIDs)
         return outcome
     }
 }
