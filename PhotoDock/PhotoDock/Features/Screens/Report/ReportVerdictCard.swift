@@ -12,6 +12,10 @@ struct ReportVerdictCard: View {
     /// 丸をどこまで描いたか（0 = まだ / 1 = 描き終えた）。出たときに 0 から 1 へ動かす
     @State private var drawn = false
 
+    /// 最後に見せた判定。A でなかったものが A になって戻ってきたときに、1回だけはじけさせる
+    @State private var shownGrade: ScanReport.Grade?
+    @State private var bursts = 0
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -50,11 +54,19 @@ struct ReportVerdictCard: View {
                         // 12時の位置から、時計回りに描く
                         .rotationEffect(.degrees(-90))
                 }
+                .overlay {
+                    BurstView(trigger: bursts, color: report.grade.tint)
+                        .frame(width: Metrics.gradeDiameter * 1.7, height: Metrics.gradeDiameter * 1.7)
+                }
                 .accessibilityLabel("判定 \(report.grade.rawValue)")
         }
         .animation(Motion.quick, value: report.verdictHeadline)
         .animation(Motion.bounce, value: report.grade)
-        .onAppear { draw() }
+        .onAppear {
+            draw()
+            celebrateIfCleared()
+        }
+        .sensoryFeedback(.success, trigger: bursts)
         .padding(Spacing.m)
         .background(Color.surface, in: .rect(cornerRadius: Metrics.cardRadius))
         .overlay {
@@ -62,6 +74,14 @@ struct ReportVerdictCard: View {
                 .stroke(Color.hairline, lineWidth: Metrics.hairlineWidth)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// 対処を進めて、判定が A になった。この欄がまた見えたとき（写真詳細から戻ってきたとき）に、1回だけはじける。
+    /// 最初から A だった場合は、はじけない（何もしていないのに祝われても、うれしくない）
+    private func celebrateIfCleared() {
+        defer { shownGrade = report.grade }
+        guard let shownGrade, shownGrade != .a, report.grade == .a, !reduceMotion else { return }
+        bursts += 1
     }
 
     /// 出たときに1回だけ描く。「視差効果を減らす」がオンなら、最初から描き終えた状態で出す
