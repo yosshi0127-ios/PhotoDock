@@ -17,6 +17,7 @@ struct ScanProgressCard: View {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.xxs) {
                 Text(completed.formatted())
                     .font(.verdict)
+                    .contentTransition(.numericText(value: Double(completed)))
                 Text("/ \(total.formatted()) 枚")
                     .font(.rowLabel)
                     .foregroundStyle(Color.inkSecondary)
@@ -25,13 +26,18 @@ struct ScanProgressCard: View {
                     Text(remainingText)
                         .font(.note)
                         .foregroundStyle(Color.inkSecondary)
+                        .contentTransition(.numericText())
                 }
             }
             .monospacedDigit()
+            .animation(Motion.quick, value: completed)
+            .animation(Motion.quick, value: remainingText)
 
             // total が 0 でも割り算が壊れないように下限を 1 にする
             ProgressView(value: Double(min(completed, total)), total: Double(max(1, total)))
                 .tint(Color.themeAccent)
+                // 1枚ごとに刻まず、なめらかに伸ばす
+                .animation(Motion.settle, value: completed)
                 .accessibilityHidden(true)
         }
         .padding(Spacing.m)

@@ -17,6 +17,8 @@ struct ReportTable: View {
     /// 行を押したとき。nil なら押せない表として出す。所見のない行は常に押せない
     var onSelect: ((FindingKind) -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -72,17 +74,27 @@ struct ReportTable: View {
             Text(verdictLabel(item))
                 .font(item.verdict.isEmphasized ? .rowValue : .rowLabel)
                 .foregroundStyle(isPending(item) ? Color.inkSecondary : item.verdict.tint)
+                // 判定が変わったとき（確認中 → 危険、要確認 → 対応済み）に、その言葉だけが軽く弾む
+                .phaseAnimator([false, true], trigger: item.verdict) { content, isPopped in
+                    content.scaleEffect(isPopped && !reduceMotion ? 1.18 : 1, anchor: .leading)
+                } animation: { _ in
+                    Motion.bounce
+                }
                 .frame(minWidth: Self.verdictWidth, alignment: .leading)
             Text(item.displayCount.formatted())
                 .font(item.photoCount > 0 ? .rowValue : .rowLabel)
                 .monospacedDigit()
                 .foregroundStyle(item.photoCount > 0 ? Color.ink : Color.inkSecondary)
+                // 診断中に枚数が増えるとき、数字が転がる
+                .contentTransition(.numericText(value: Double(item.displayCount)))
+                .animation(Motion.quick, value: item.displayCount)
                 .frame(minWidth: Self.countWidth, alignment: .trailing)
             chevron.opacity(showsChevron ? 1 : 0)
         }
         .padding(.horizontal, Spacing.m)
         .frame(minHeight: Metrics.rowMinHeight)
         .background(item.verdict == .danger ? Color.dangerSurface : Color.clear, in: .rect)
+        .animation(Motion.quick, value: item.verdict)
         .contentShape(.rect)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(item.kind.label)、\(verdictLabel(item))、\(item.displayCount.formatted()) 枚")

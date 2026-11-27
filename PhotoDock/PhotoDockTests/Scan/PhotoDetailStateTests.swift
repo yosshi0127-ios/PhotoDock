@@ -156,4 +156,26 @@ struct PhotoDetailStateTests {
         #expect(state.removal == .hide)
         #expect(await actions.deletedIDs.isEmpty)
     }
+
+    // MARK: - 開いた元の画面の作り直し
+
+    /// 実機で、対応を変えた直後の1〜2秒、戻るボタンを押しても効かなかった。その間は戻る操作を出さない
+    @Test("対応を変えてから、開いた元の画面の作り直しが終わるまで、作り直し中になる")
+    func refreshingCoversChangeAndRefresh() async {
+        let state = makeState(dispositions: SpyPhotoDispositionRepository())
+        var seenDuringChange = false
+        var seenDuringRefresh = false
+
+        await state.perform({
+            seenDuringChange = state.isRefreshing
+            await state.dismiss(record: record)
+        }, thenRefresh: {
+            seenDuringRefresh = state.isRefreshing
+        })
+
+        #expect(seenDuringChange)
+        #expect(seenDuringRefresh)
+        #expect(!state.isRefreshing)
+        #expect(state.isDismissed)
+    }
 }

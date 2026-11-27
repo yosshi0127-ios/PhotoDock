@@ -37,6 +37,19 @@ final class PhotoDetailState {
     /// iOS の確認に答えるのを待っている。その間は、ほかのボタンを押せなくする
     private(set) var isWorking = false
 
+    /// 対応を変えたあと、開いた元の画面（ホーム・診断中の画面）が結果票を作り直している。
+    /// **その間は、戻る操作を出さない**。実機（写真 3,000枚）では、作り直しに1〜2秒かかり、
+    /// その間に押した「戻る」が効かなかった（押しても何も起きないボタンが見えている状態だった）
+    private(set) var isRefreshing = false
+
+    /// 対応を変える操作を、開いた元の画面の作り直しが終わるまでをひとまとまりにして行う
+    func perform(_ change: () async -> Void, thenRefresh refresh: () async -> Void) async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await change()
+        await refresh()
+    }
+
     // 依存は UseCase 経由のみ
     private let loadThumbnail = LoadThumbnailUseCase()
     private let dismissPhoto = DismissPhotoUseCase()

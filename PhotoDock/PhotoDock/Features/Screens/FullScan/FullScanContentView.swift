@@ -25,6 +25,8 @@ struct FullScanContentView: View {
                 header
                 sections
             }
+            // 診断中 → 完了・中断 で中身が入れ替わるとき、ぱっと切り替えない
+            .motion(Motion.settle, value: stage)
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Spacing.l)
@@ -33,6 +35,19 @@ struct FullScanContentView: View {
         .foregroundStyle(Color.ink)
         .background(Color.ground)
         .safeAreaInset(edge: .bottom) { footer }
+        // 終わった・止まったことを、指にも伝える
+        .sensoryFeedback(trigger: stage) { _, new in
+            new == 2 ? .success : new == 1 ? .warning : nil
+        }
+    }
+
+    /// 画面の段階（結果票の中身ではなく、どの段階か）。入れ替わりの動きのきっかけにする
+    private var stage: Int {
+        switch phase {
+        case .idle, .scanning: 0
+        case .interrupted: 1
+        case .finished: 2
+        }
     }
 
     // MARK: - 見出し
@@ -41,6 +56,7 @@ struct FullScanContentView: View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(title)
                 .font(.screenTitle)
+                .contentTransition(.interpolate)
             if let subtitle {
                 Text(subtitle)
                     .font(.note)
@@ -94,6 +110,7 @@ struct FullScanContentView: View {
 
         case let .finished(report):
             ReportVerdictCard(report: report)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
             ReportTable(items: report.items, onSelect: onSelect)
             if report.undiagnosed > 0 {
                 // 内訳（iCloud にある・読み取れなかった等）と対処は、結果票のほうに出す
