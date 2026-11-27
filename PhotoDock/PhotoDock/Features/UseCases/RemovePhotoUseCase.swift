@@ -34,8 +34,8 @@ struct RemovePhotoUseCase: Sendable {
     /// takenAt は写真を撮った日。あとで対応済みの一覧に出すために控える（実行したあとは、もう読めない）
     func callAsFunction(_ method: Method, record: ScanRecord, takenAt: Date? = nil) async -> PhotoActionOutcome {
         let outcome = switch method {
-        case .hide: await photoActions.hide(assetID: record.assetID)
-        case .delete: await photoActions.delete(assetID: record.assetID)
+        case .hide: await photoActions.hide(assetIDs: [record.assetID])
+        case .delete: await photoActions.delete(assetIDs: [record.assetID])
         }
         guard outcome == .done else { return outcome }
 

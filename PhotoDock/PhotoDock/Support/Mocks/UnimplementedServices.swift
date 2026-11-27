@@ -85,11 +85,11 @@ struct UnimplementedPhotoDispositionRepository: PhotoDispositionRepository {
 }
 
 struct UnimplementedPhotoActionService: PhotoActionService {
-    func hide(assetID: String) async -> PhotoActionOutcome {
-        fatalError("UnimplementedPhotoActionService.hide(assetID:) が呼ばれた（テストで上書きすること）")
+    func hide(assetIDs: [String]) async -> PhotoActionOutcome {
+        fatalError("UnimplementedPhotoActionService.hide(assetIDs:) が呼ばれた（テストで上書きすること）")
     }
 
-    func delete(assetID: String) async -> PhotoActionOutcome {
-        fatalError("UnimplementedPhotoActionService.delete(assetID:) が呼ばれた（テストで上書きすること）")
+    func delete(assetIDs: [String]) async -> PhotoActionOutcome {
+        fatalError("UnimplementedPhotoActionService.delete(assetIDs:) が呼ばれた（テストで上書きすること）")
     }
 }
