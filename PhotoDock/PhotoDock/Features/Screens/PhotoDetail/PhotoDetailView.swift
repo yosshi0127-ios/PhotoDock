@@ -86,8 +86,11 @@ struct PhotoDetailView: View {
             footnote("削除しました（30日は復元できます）", color: .inkSecondary)
         }
         ActionButton(title: "戻る") { close() }
-        // 特定の写真や「非表示」アルバムを直接開く方法は無い。写真アプリを開くところまで
+        // 特定の写真や「非表示」アルバムを直接開く方法は無い。写真アプリを開くところまでで、その先は言葉で案内する
         ActionButton(title: "写真アプリを開く", style: .secondary) { openPhotosApp() }
+        if let path = method.disposition.photosAppPath {
+            footnote(path, color: .inkSecondary)
+        }
     }
 
     private func footnote(_ text: String, color: Color) -> some View {

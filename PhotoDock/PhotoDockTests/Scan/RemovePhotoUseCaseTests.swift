@@ -93,4 +93,14 @@ struct RemovePhotoUseCaseTests {
 
         #expect(outcome == .done)
     }
+
+    @Test("方法と、対応として残す種類の対応")
+    func methodMapsToDisposition() {
+        #expect(RemovePhotoUseCase.Method.hide.disposition == .hidden)
+        #expect(RemovePhotoUseCase.Method.delete.disposition == .deleted)
+        // 写真アプリの中での行き先は、写真を動かした対処にだけある
+        #expect(PhotoDisposition.Action.hidden.photosAppPath?.hasSuffix("非表示") == true)
+        #expect(PhotoDisposition.Action.deleted.photosAppPath?.hasSuffix("最近削除した項目") == true)
+        #expect(PhotoDisposition.Action.dismissed.photosAppPath == nil)
+    }
 }
