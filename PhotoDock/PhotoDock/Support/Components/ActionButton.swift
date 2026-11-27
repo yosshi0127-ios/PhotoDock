@@ -18,8 +18,12 @@ struct ActionButton: View {
     var style: Style = .primary
     let action: () -> Void
 
+    /// 押した回数。振動のきっかけにする
+    @State private var taps = 0
+
     var body: some View {
         Button {
+            taps += 1
             action()
         } label: {
             Text(title)
@@ -34,8 +38,23 @@ struct ActionButton: View {
                     RoundedRectangle(cornerRadius: Metrics.cardRadius)
                         .stroke(Color.themeAccent, lineWidth: Metrics.hairlineWidth)
                 }
+                // 文言が変わるとき（「◯ 枚を診断」→「もう一度診断」）は、ぱっと差し替えずに切り替える
+                .contentTransition(.interpolate)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle())
+        .sensoryFeedback(.impact(weight: .light), trigger: taps)
+    }
+}
+
+/// 押しているあいだ少し縮み、離すとばねで戻る。押せたことが指に返る
+struct PressableButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? Motion.pressedScale : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(Motion.quick, value: configuration.isPressed)
     }
 }
 

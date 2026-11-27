@@ -67,10 +67,14 @@ struct ReportItemView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.m)
+            // 切り替えたとき・対処して行が移ったときに、一覧をぱっと差し替えない
+            .motion(Motion.quick, value: isShowingHandled)
+            .motion(Motion.settle, value: shown.map(\.id))
         }
         .foregroundStyle(Color.ink)
         .background(Color.ground)
         .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.selection, trigger: showsHandled)
         .navigationDestination(item: $openedPhoto) { photo in
             PhotoDetailView(photo: photo, onDispositionChange: onDispositionChange)
         }

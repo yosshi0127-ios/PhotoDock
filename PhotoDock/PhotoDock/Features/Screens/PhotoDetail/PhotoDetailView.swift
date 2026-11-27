@@ -34,6 +34,8 @@ struct PhotoDetailView: View {
         .background(Color.ground)
         .safeAreaInset(edge: .bottom) { footer }
         .navigationBarTitleDisplayMode(.inline)
+        // 対応を変えた直後は、開いた元の画面が結果票を作り直している。終わるまで、戻る操作を出さない
+        .navigationBarBackButtonHidden(state.isWorking || state.isRefreshing)
         .task { await state.show(record: photo.record, isHandled: photo.isHandled) }
     }
 
@@ -47,7 +49,13 @@ struct PhotoDetailView: View {
                 actions
             }
         }
-        .disabled(state.isWorking)
+        .disabled(state.isWorking || state.isRefreshing)
+        // 対処のあと、ボタンの並びが入れ替わる
+        .motion(Motion.settle, value: state.removal)
+        .motion(Motion.quick, value: state.isDismissed)
+        .sensoryFeedback(.success, trigger: state.removal) { _, new in new != nil }
+        .sensoryFeedback(.selection, trigger: state.isDismissed)
+        .sensoryFeedback(.error, trigger: state.didFailToRemove || state.didFailToSave) { _, new in new }
         .frame(maxWidth: Metrics.readableWidth)
         .padding(.horizontal, Spacing.l)
         .padding(.vertical, Spacing.s)
@@ -73,6 +81,8 @@ struct PhotoDetailView: View {
         }
         .font(.action)
         .foregroundStyle(Color.themeAccent)
+        .contentTransition(.interpolate)
+        .buttonStyle(PressableButtonStyle())
         .frame(minHeight: Metrics.rowMinHeight)
     }
 
@@ -104,8 +114,9 @@ struct PhotoDetailView: View {
 
     private func remove(_ method: RemovePhotoUseCase.Method) {
         Task {
-            await state.remove(method, record: photo.record, takenAt: photo.takenAt)
-            await onDispositionChange()
+            await state.perform({
+                await state.remove(method, record: photo.record, takenAt: photo.takenAt)
+            }, thenRefresh: onDispositionChange)
         }
     }
 
@@ -119,15 +130,17 @@ struct PhotoDetailView: View {
 
     private func dismissFindings() {
         Task {
-            await state.dismiss(record: photo.record, takenAt: photo.takenAt)
-            await onDispositionChange()
+            await state.perform({
+                await state.dismiss(record: photo.record, takenAt: photo.takenAt)
+            }, thenRefresh: onDispositionChange)
         }
     }
 
     private func reopen() {
         Task {
-            await state.reopen(record: photo.record)
-            await onDispositionChange()
+            await state.perform({
+                await state.reopen(record: photo.record)
+            }, thenRefresh: onDispositionChange)
         }
     }
 
