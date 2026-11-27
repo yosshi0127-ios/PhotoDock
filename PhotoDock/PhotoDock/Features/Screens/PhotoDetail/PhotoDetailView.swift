@@ -14,6 +14,14 @@ struct PhotoDetailView: View {
 
     @State private var state = PhotoDetailState()
 
+    /// 画面のうち、中身を置ける高さ（上の帯と、下のボタンを除く）
+    @State private var visibleHeight: CGFloat = 0
+    /// 写真のほかに置いているもの（日付・判定の表）の高さ
+    @State private var headerHeight: CGFloat = 0
+    @State private var tableHeight: CGFloat = 0
+    /// 写真を全画面で見ている
+    @State private var isZoomed = false
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
@@ -22,13 +30,26 @@ struct PhotoDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 header
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
                 picture
                 PhotoFindingTable(findings: state.findings)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tableHeight = $0 }
             }
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Spacing.l)
             .padding(.vertical, Spacing.m)
+        }
+        // containerSize は、上の帯と下のボタンを除いたあとの大きさ（実測。ここからさらに引くと、写真が小さくなりすぎる）
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.containerSize.height
+        } action: { _, new in
+            visibleHeight = new
+        }
+        .fullScreenCover(isPresented: $isZoomed) {
+            if let image = state.image {
+                PhotoZoomView(image: image, findings: photo.record.findings)
+            }
         }
         .foregroundStyle(Color.ink)
         .background(Color.ground)
@@ -160,16 +181,34 @@ struct PhotoDetailView: View {
         }
     }
 
+    /// 写真に使える高さ。日付・写真・判定の表が、スクロールせずに1画面に入るようにする。
+    /// 縦長の写真をそのまま幅いっぱいに出すと、表が画面の下に押し出されて見えなかった。
+    /// 表が長くて入りきらないときは、写真をこれ以上は縮めない（その場合だけスクロールが残る）
+    private var pictureMaxHeight: CGFloat? {
+        guard visibleHeight > 0 else { return nil }
+        // 上下の余白と、日付・写真・表のあいだの間隔
+        let chrome = Spacing.m * 4
+        return max(Metrics.photoMinHeight, visibleHeight - headerHeight - tableHeight - chrome)
+    }
+
     @ViewBuilder
     private var picture: some View {
         if let image = state.image {
-            PhotoWithFindings(image: image, findings: photo.record.findings)
-                .clipShape(.rect(cornerRadius: Metrics.tagRadius))
-                // 白い写真だと、地との境が分からなくなる
-                .overlay {
-                    RoundedRectangle(cornerRadius: Metrics.tagRadius)
-                        .stroke(Color.hairline, lineWidth: Metrics.hairlineWidth)
-                }
+            Button {
+                isZoomed = true
+            } label: {
+                PhotoWithFindings(image: image, findings: photo.record.findings)
+                    .clipShape(.rect(cornerRadius: Metrics.tagRadius))
+                    // 白い写真だと、地との境が分からなくなる
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Metrics.tagRadius)
+                            .stroke(Color.hairline, lineWidth: Metrics.hairlineWidth)
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(state.removal != nil)
+            .accessibilityLabel("写真を大きく表示")
+            .frame(maxHeight: pictureMaxHeight)
                 // 対処したら、写真はここから消える（非表示: ぼやけて薄れる／削除: 粒になって流れる）
                 .blur(radius: state.removal == .hide && !reduceMotion ? 14 : 0)
                 .opacity(state.removal == nil ? 1 : 0)
