@@ -15,6 +15,18 @@ extension PhotoDisposition.Action {
         }
     }
 
+    /// 写真アプリの中での行き先。**直接は開けない**ので、行き方を言葉で添える。
+    /// 実機（iOS 26・2026-11-27）で、写真アプリの URL を10通り試したが、アルバムまで指定できるものは無かった。
+    /// 「写真アプリを開く」で着くのは「コレクション」の画面で、下にスクロールすると「ユーティリティ」があり、
+    /// その中に「非表示」と「最近削除した項目」がある（項目の名前は、その実機の表示のとおり）
+    var photosAppPath: String? {
+        switch self {
+        case .dismissed: nil
+        case .hidden: "コレクション › ユーティリティ › 非表示"
+        case .deleted: "コレクション › ユーティリティ › 最近削除した項目"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .dismissed: "checkmark"

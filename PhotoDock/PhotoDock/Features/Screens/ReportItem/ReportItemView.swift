@@ -80,6 +80,13 @@ struct ReportItemView: View {
         openedPhoto = photo
     }
 
+    /// 写真アプリの中での行き先。非表示が先、削除が後（一覧にある対処だけ）
+    private var removedPaths: [String] {
+        [PhotoDisposition.Action.hidden, .deleted]
+            .filter { action in removed.contains { $0.action == action } }
+            .compactMap(\.photosAppPath)
+    }
+
     private func openPhotosApp() {
         openURL(.photosApp)
     }
@@ -121,6 +128,14 @@ struct ReportItemView: View {
             }
 
             ActionButton(title: "写真アプリを開く", style: .secondary) { openPhotosApp() }
+            // 直接は開けないので、行き方を添える。並んでいる対処のぶんだけ出す
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                ForEach(removedPaths, id: \.self) { path in
+                    Text(path)
+                }
+            }
+            .font(.note)
+            .foregroundStyle(Color.inkSecondary)
         }
     }
 

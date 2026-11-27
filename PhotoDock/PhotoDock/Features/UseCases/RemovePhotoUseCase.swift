@@ -16,6 +16,14 @@ struct RemovePhotoUseCase: Sendable {
     enum Method: Sendable, Equatable {
         case hide
         case delete
+
+        /// 実行したあとに、対応として残す種類
+        var disposition: PhotoDisposition.Action {
+            switch self {
+            case .hide: .hidden
+            case .delete: .deleted
+            }
+        }
     }
 
     @Dependency(\.photoActions) private var photoActions
@@ -31,8 +39,9 @@ struct RemovePhotoUseCase: Sendable {
         }
         guard outcome == .done else { return outcome }
 
-        let action: PhotoDisposition.Action = method == .hide ? .hidden : .deleted
-        try? await photoDispositions.save(reportPolicy.disposition(action, for: record, takenAt: takenAt, decidedAt: .now))
+        try? await photoDispositions.save(
+            reportPolicy.disposition(method.disposition, for: record, takenAt: takenAt, decidedAt: .now)
+        )
         return .done
     }
 }
