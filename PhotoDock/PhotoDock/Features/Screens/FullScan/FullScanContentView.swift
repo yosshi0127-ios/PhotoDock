@@ -54,9 +54,16 @@ struct FullScanContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(title)
-                .font(.screenTitle)
-                .contentTransition(.interpolate)
+            HStack(spacing: Spacing.xs) {
+                Text(title)
+                    .font(.screenTitle)
+                    .contentTransition(.interpolate)
+                // 診断しているあいだだけ、小さな球が回る
+                if stage == 0 {
+                    ScanningOrb()
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
             if let subtitle {
                 Text(subtitle)
                     .font(.note)

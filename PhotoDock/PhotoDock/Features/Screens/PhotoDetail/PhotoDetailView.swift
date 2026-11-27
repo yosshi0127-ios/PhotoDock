@@ -15,6 +15,7 @@ struct PhotoDetailView: View {
     @State private var state = PhotoDetailState()
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -52,7 +53,7 @@ struct PhotoDetailView: View {
         .disabled(state.isWorking || state.isRefreshing)
         // 対処のあと、ボタンの並びが入れ替わる
         .motion(Motion.settle, value: state.removal)
-        .motion(Motion.quick, value: state.isDismissed)
+        .motion(Motion.bounce, value: state.isDismissed)
         .sensoryFeedback(.success, trigger: state.removal) { _, new in new != nil }
         .sensoryFeedback(.selection, trigger: state.isDismissed)
         .sensoryFeedback(.error, trigger: state.didFailToRemove || state.didFailToSave) { _, new in new }
@@ -71,6 +72,15 @@ struct PhotoDetailView: View {
         }
         if state.didFailToSave {
             footnote("保存できませんでした", color: .danger)
+        }
+
+        if state.isDismissed {
+            // 問題なしにしたことを、チェックの記号が弾んで出ることで伝える
+            Label("対応済み", systemImage: "checkmark.circle.fill")
+                .font(.sectionTitle)
+                .foregroundStyle(Color.themeAccent)
+                .symbolEffect(.bounce, options: .nonRepeating, value: state.isDismissed)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
         }
 
         ActionButton(title: "非表示") { remove(.hide) }
@@ -161,6 +171,20 @@ struct PhotoDetailView: View {
                     RoundedRectangle(cornerRadius: Metrics.tagRadius)
                         .stroke(Color.hairline, lineWidth: Metrics.hairlineWidth)
                 }
+                // 対処したら、写真はここから消える（非表示: ぼやけて薄れる／削除: 粒になって流れる）
+                .blur(radius: state.removal == .hide && !reduceMotion ? 14 : 0)
+                .opacity(state.removal == nil ? 1 : 0)
+                .background {
+                    if let removal = state.removal {
+                        removedPlaceholder(removal)
+                    }
+                }
+                .overlay {
+                    if state.removal == .delete, !reduceMotion {
+                        DustDissolveView(image: image)
+                    }
+                }
+                .animation(reduceMotion ? nil : Motion.settle, value: state.removal)
                 .frame(maxWidth: .infinity)
         } else {
             // 読み込み中も、読み込めなかったときも、同じ大きさの枠を置く（下の表が動かないように）
@@ -177,6 +201,16 @@ struct PhotoDetailView: View {
             .aspectRatio(4 / 3, contentMode: .fit)
             .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.tagRadius))
         }
+    }
+
+    /// 写真が消えたあとに、同じ場所に残す記号
+    private func removedPlaceholder(_ method: RemovePhotoUseCase.Method) -> some View {
+        Image(systemName: method.disposition.symbol)
+            .font(.largeTitle)
+            .foregroundStyle(Color.inkSecondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.tagRadius))
+            .accessibilityHidden(true)
     }
 
     /// 経路ごとの札は出さない。いま見つけるのは写真に写っているものだけで、どの方法でも結果が同じため
