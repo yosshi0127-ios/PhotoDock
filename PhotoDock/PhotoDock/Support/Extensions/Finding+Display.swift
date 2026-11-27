@@ -39,20 +39,6 @@ extension Severity {
     }
 }
 
-extension [FindingKind] {
-    /// 写真詳細の「この写真を渡すと」の文。写っているものが文字か顔かで言い分ける
-    var sharingNote: String {
-        let hasFace = contains(.bystanderFace)
-        let hasText = contains { $0 != .bystanderFace }
-        let subject = switch (hasText, hasFace) {
-        case (true, true): "文字と顔"
-        case (false, true): "顔"
-        default: "文字"
-        }
-        return "送ると、\(subject)はそのまま残ります"
-    }
-}
-
 extension FindingKind {
 
     /// 項目の一覧の上に出す補足。**名前で分かる項目には付けない**。

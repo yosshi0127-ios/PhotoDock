@@ -24,7 +24,6 @@ struct PhotoDetailView: View {
                 header
                 picture
                 PhotoFindingTable(findings: state.findings)
-                sharingNote
             }
             .frame(maxWidth: Metrics.readableWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
@@ -211,21 +210,6 @@ struct PhotoDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.tagRadius))
             .accessibilityHidden(true)
-    }
-
-    /// 経路ごとの札は出さない。いま見つけるのは写真に写っているものだけで、どの方法でも結果が同じため
-    private var sharingNote: some View {
-        Label {
-            Text(photo.kinds.sharingNote)
-        } icon: {
-            Image(systemName: "paperplane")
-                .accessibilityHidden(true)
-        }
-        .font(.note)
-        .foregroundStyle(Color.inkSecondary)
-        .padding(Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.surfaceMuted, in: .rect(cornerRadius: Metrics.cardRadius))
     }
 }
 
